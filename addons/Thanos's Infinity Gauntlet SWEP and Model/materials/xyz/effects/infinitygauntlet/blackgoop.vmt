@@ -1,0 +1,24 @@
+"UnlitGeneric"
+{
+	$basetexture "xyz/effects/infinitygauntlet/blackgoop"
+	$vertexalpha 1 //Allows surface.SetDrawColor
+	$vertexcolor 1
+	$scrollSpeed .001//.3
+	
+	"Proxies"
+	{
+		AnimatedTexture
+		{
+			Animatedtexturevar $basetexture
+			Animatedtextureframenumvar $frame
+			Animatedtextureframerate 30
+		}
+		
+		TextureScroll
+		{
+			textureScrollVar $basetexturetransform
+			textureScrollRate $scrollSpeed
+			textureScrollAngle 0
+		}
+	}
+}

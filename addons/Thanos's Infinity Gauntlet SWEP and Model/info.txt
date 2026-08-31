@@ -1,0 +1,13 @@
+"AddonInfo"
+{
+	"name" "Thanos's Infinity Gauntlet SWEP and Model"
+	"author_name" "Author Name"
+	"info" "{
+	"description": "Description",
+	"type": "weapon",
+	"tags": [
+		"comic",
+		"fun"
+	]
+}"
+}

@@ -1,0 +1,22 @@
+UnlitGeneric
+{
+	$basetexture "models/spawn_effect"
+	$additive 1
+	$basetexturetransform "center .2 .6 scale 100 100 rotate 0 translate 0 0"
+	$model 1
+	$translucent 1
+	$vertexcolor 1
+	$vertexalpha 1
+	$ignorez 1
+	$scrollSpeed 1.0
+	
+	"Proxies"
+	{
+		TextureScroll
+		{
+			texturescrollvar $basetexturetransform
+			texturescrollrate $scrollSpeed
+			texturescrollangle 36
+		}
+	}
+}

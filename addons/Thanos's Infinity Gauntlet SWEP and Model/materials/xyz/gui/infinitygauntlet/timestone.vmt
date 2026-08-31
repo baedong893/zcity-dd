@@ -1,0 +1,7 @@
+"UnlitGeneric"
+{
+	$basetexture "xyz/gui/infinitygauntlet/timestone"
+	$vertexalpha 1
+	$vertexcolor 1
+	$additive 1
+}

@@ -1,0 +1,26 @@
+UnlitGeneric
+{
+	$basetexture "xyz/effects/infinitygauntlet/purplegoop"
+	$basetexturetransform "center .2 .6 scale 100 100 rotate 0 translate 0 0"
+	$model 1
+	$translucent 1
+	$vertexcolor 1
+	$vertexalpha 1
+	$ignorez 1
+	$texscale 6
+	Proxies
+	{
+		
+		TextureTransform
+		{
+			scaleVar $texscale
+			resultVar $basetexturetransform
+		}
+		AnimatedTexture
+		{
+			Animatedtexturevar $basetexture
+			Animatedtextureframenumvar $frame
+			Animatedtextureframerate 30
+		}
+	}
+}

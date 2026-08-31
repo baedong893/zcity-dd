@@ -1,0 +1,12 @@
+Z-City custom loading screen
+
+1. Upload this file to a web host:
+   html/zcity_loading.html
+
+2. Set this server convar to the public URL:
+   zc_loadingurl "https://your-domain.example/zcity_loading.html"
+
+3. Restart the server or change the map.
+
+Garry's Mod clients cannot load an HTML file directly from the server's addon folder during connection.
+The loading screen must be a public http or https URL because it is opened through sv_loadingurl.

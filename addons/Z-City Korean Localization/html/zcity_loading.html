@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ko">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Z-City Loading</title>
+	<style>
+		:root {
+			color-scheme: dark;
+			font-family: "Segoe UI", "Noto Sans KR", Arial, sans-serif;
+			background: #08090b;
+			color: #f2f4f8;
+		}
+
+		* {
+			box-sizing: border-box;
+		}
+
+		body {
+			min-height: 100vh;
+			margin: 0;
+			display: grid;
+			place-items: center;
+			background:
+				linear-gradient(rgba(8, 9, 11, 0.7), rgba(8, 9, 11, 0.94)),
+				radial-gradient(circle at 24% 18%, rgba(118, 25, 25, 0.32), transparent 34%),
+				linear-gradient(145deg, #14171d 0%, #08090b 54%, #19110f 100%);
+		}
+
+		main {
+			width: min(920px, calc(100vw - 48px));
+			padding: 42px;
+			border: 1px solid rgba(255, 255, 255, 0.12);
+			background: rgba(12, 14, 18, 0.86);
+			box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+		}
+
+		h1 {
+			margin: 0 0 14px;
+			font-size: clamp(34px, 6vw, 76px);
+			line-height: 0.95;
+			letter-spacing: 0;
+		}
+
+		p {
+			margin: 0;
+			color: #c6ccd6;
+			font-size: clamp(16px, 2vw, 22px);
+			line-height: 1.55;
+		}
+
+		.actions {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 12px;
+			margin-top: 30px;
+		}
+
+		a {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			min-height: 46px;
+			padding: 0 18px;
+			border: 1px solid rgba(255, 255, 255, 0.2);
+			background: #b92a2a;
+			color: #fff;
+			text-decoration: none;
+			font-weight: 700;
+		}
+
+		a.secondary {
+			background: transparent;
+			color: #e6eaf0;
+		}
+
+		.status {
+			margin-top: 34px;
+			padding-top: 18px;
+			border-top: 1px solid rgba(255, 255, 255, 0.12);
+			font-size: 14px;
+			color: #8d96a6;
+		}
+	</style>
+</head>
+<body>
+	<main>
+		<h1>Z-City</h1>
+		<p>서버 콘텐츠를 받고 있습니다. 원활한 접속을 위해 모음집을 구독해주세요.</p>
+		<p>Please subscribe to the workshop collection for faster and cleaner loading.</p>
+
+		<div class="actions">
+			<a href="https://steamcommunity.com/sharedfiles/filedetails/?id=3737337586" target="_blank" rel="noopener">모음집 구독하기</a>
+			<a class="secondary" href="https://steamcommunity.com/sharedfiles/filedetails/?id=3737337586" target="_blank" rel="noopener">Open Workshop Collection</a>
+		</div>
+
+		<div class="status">Loading server resources...</div>
+	</main>
+</body>
+</html>

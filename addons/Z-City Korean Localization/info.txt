@@ -1,0 +1,6 @@
+"AddonInfo"
+{
+	"name" "Z-City Korean Localization"
+	"author_name" "Author Name"
+	"info" "{"title":"Z-City Korean Localization","type":"gamemode","tags":["roleplay","movie","realism"],"ignore":[]}"
+}

@@ -1,0 +1,6 @@
+"VertexLitGeneric"
+{
+	"$basetexture" "dreams/empty"
+	"$translucent" 1
+	"$alpha" 1
+}

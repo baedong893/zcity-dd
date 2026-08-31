@@ -1,0 +1,7 @@
+Sprite
+{
+	$baseTexture "xyz/effects/infinitygauntlet/glow_hard"
+	$vertexalpha 1
+	$vertexcolor 1
+	$spriterendermode 5
+}
