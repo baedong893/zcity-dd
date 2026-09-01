@@ -262,7 +262,10 @@ function hg.CreateButton(buttonData, convarName, ParentPanel, yPos)
             end
         end
 
-        local languageHook = "ZCLangSettingsCombo_" .. combo:EntIndex()
+        -- VGUI panels are not entities and therefore do not have EntIndex().
+        -- Keep a clientside serial so every settings panel gets its own hook.
+        hg.ZCLangSettingsComboSerial = (hg.ZCLangSettingsComboSerial or 0) + 1
+        local languageHook = "ZCLangSettingsCombo_" .. hg.ZCLangSettingsComboSerial
         hook.Add("ZCLangChanged", languageHook, function()
             if not IsValid(combo) then
                 hook.Remove("ZCLangChanged", languageHook)
@@ -271,6 +274,12 @@ function hg.CreateButton(buttonData, convarName, ParentPanel, yPos)
 
             timer.Simple(0, PopulateLanguageChoices)
         end)
+
+        local oldOnRemove = combo.OnRemove
+        combo.OnRemove = function(self)
+            hook.Remove("ZCLangChanged", languageHook)
+            if oldOnRemove then oldOnRemove(self) end
+        end
     elseif convarType == 'bool' then
         local toggle = vgui.Create('DButton', pppanel)
         toggle:SetSize(pppanel:GetWide() / 18, pppanel:GetTall() / 2)
