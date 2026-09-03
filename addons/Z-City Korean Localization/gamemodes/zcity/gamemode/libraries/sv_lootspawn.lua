@@ -585,7 +585,8 @@ timer.Create("SpawnTheBoxes", 8, 0, function() hook_Run("Boxes Think") end)
 local vec = Vector(0, 0, 64)
 local vec_dist = Vector(500,500,500)
 hook.Add("Boxes Think", "SpawnBoxes", function()
-	if zb.ROUND_STATE ~= 1 or not CurrentRound().LootSpawn then return end
+	local currentRound = CurrentRound()
+	if zb.ROUND_STATE ~= 1 or not currentRound.LootSpawn or currentRound.AmbientLootSpawn == false then return end
 	//local spawnPos = table.Random(spawns) + vec
 
 	//local spawnPos = zb:FurthestFromEveryone(spawns) + vec

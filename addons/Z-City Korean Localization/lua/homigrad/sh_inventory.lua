@@ -32,8 +32,9 @@ if CLIENT then
 	local colBlue = Color(150, 150, 150)
 	local buttons = {}
 	local function nameThings(i, thing)
-		local weps = weapons.Get(i)
-		local entss = scripted_ents.Get(i)
+		local class = isstring(thing) and (weapons.Get(thing) or scripted_ents.Get(thing)) and thing or i
+		local weps = weapons.Get(class)
+		local entss = scripted_ents.Get(class)
 		if weps then return weps.PrintName end
 		if entss then return entss.PrintName end
 		if hg.armor and hg.armor[i] and hg.armor[i][thing] then return thing end
@@ -43,6 +44,18 @@ if CLIENT then
 	end
 
 	local function getIconThing(i, thing, tab)
+		if tab == "Supplies" and isstring(thing) then
+			local supplyWeapon = weapons.Get(thing)
+			if supplyWeapon then
+				local icon = supplyWeapon.WepSelectIcon2 or supplyWeapon.WepSelectIcon
+				return icon, icon ~= nil, supplyWeapon.WepSelectIcon2 == nil, supplyWeapon.WepSelectIcon2box
+			end
+
+			local supplyEntity = scripted_ents.Get(thing)
+			local icon = supplyEntity and supplyEntity.IconOverride
+			if icon then return icon, true, false, true end
+		end
+
 		if tab == "Weapons" and weapons.Get(i) then
 			local GunTable = weapons.Get(i)
 			--print(GunTable.WepSelectIcon2)
@@ -85,6 +98,9 @@ if CLIENT then
 		["Attachments"] = function(ply, ent, att, tbl)
 			if true then return true end
 		end,
+		["Supplies"] = function(ply, ent, slot, class)
+			if true then return true end
+		end,
 		["Money"] = function(ply, ent)
 			if true then return true end
 		end,
@@ -107,6 +123,10 @@ if CLIENT then
 		end,
 		["Attachments"] = function(ply, ent, att, tbl)
 			if true then return true end
+		end,
+		["Supplies"] = function(ply, ent, slot, class)
+			if isstring(class) and weapons.Get(class) and ply:HasWeapon(class) then return false end
+			return true
 		end,
 		["Money"] = function(ply, ent)
 			if true then return true end
@@ -172,6 +192,9 @@ if CLIENT then
 		if IsValid(ent) then
 			if (ent:IsPlayer() or ent:IsRagdoll()) then
 				nameStr = ent:GetPlayerName() or string.NiceName(ent:GetClass())
+			else
+				local stored = scripted_ents.GetStored(ent:GetClass())
+				nameStr = stored and stored.t and stored.t.PrintName or string.NiceName(ent:GetClass())
 			end
 		end
 		local name = nameStr .. "'님의 소지품" or "Container"

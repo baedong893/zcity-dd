@@ -21,6 +21,9 @@ SWEP.ViewModelFOV = 60
 SWEP.DrawCrosshair = false
 SWEP.DrawAmmo = false
 SWEP.HoldType = "normal"
+SWEP.NoDrop = true
+SWEP.AllowDrop = false
+SWEP.HideFromInventory = true
 
 SWEP.Primary.ClipSize = -1
 SWEP.Primary.DefaultClip = -1
@@ -49,6 +52,10 @@ function SWEP:Deploy()
 end
 
 function SWEP:SecondaryAttack()
+end
+
+function SWEP:ShouldDropOnDie()
+	return false
 end
 
 if SERVER then
@@ -84,6 +91,98 @@ if SERVER then
 		end
 
 		return false
+	end
+
+	local function IsStandardHomicideCannibal(ply)
+		if not IsValid(ply) or not ply:IsPlayer() then return false end
+		if not ply.isTraitor or ply.SubRole ~= "traitor_cannibal" then return false end
+		if not isfunction(CurrentRound) then return false end
+
+		local round = CurrentRound()
+		return istable(round) and round.name == "hmcd" and round.Type == "standard"
+	end
+
+	local function CaptureCorpseAppearance(rag)
+		local owner = hg and hg.RagdollOwner and hg.RagdollOwner(rag) or rag:GetNWEntity("OldRagdollController")
+		local bodygroups = {}
+
+		for _, bodygroup in ipairs(rag:GetBodyGroups() or {}) do
+			local id = bodygroup.id
+			if isnumber(id) then bodygroups[id] = rag:GetBodygroup(id) end
+		end
+
+		local subMaterials = {}
+		for id = 0, #(rag:GetMaterials() or {}) - 1 do
+			subMaterials[id] = rag:GetSubMaterial(id) or ""
+		end
+
+		local appearance = rag.CurAppearance
+		if not istable(appearance) and IsValid(owner) and istable(owner.CurAppearance) then
+			appearance = owner.CurAppearance
+		end
+
+		local name = rag:GetNWString("PlayerName", "")
+		if name == "" and istable(appearance) then name = appearance.AName or "" end
+		if name == "" and IsValid(owner) then name = owner:GetNWString("PlayerName", "") end
+
+		local playerColor = IsValid(owner) and owner.GetPlayerColor and owner:GetPlayerColor() or rag:GetNWVector("PlayerColor", Vector(1, 1, 1))
+		local accessories = rag.GetNetVar and rag:GetNetVar("Accessories") or nil
+		if accessories == nil and IsValid(owner) and owner.GetNetVar then
+			accessories = owner:GetNetVar("Accessories")
+		end
+
+		return {
+			model = rag:GetModel(),
+			skin = rag:GetSkin(),
+			bodygroups = bodygroups,
+			subMaterials = subMaterials,
+			material = rag:GetMaterial(),
+			color = rag:GetColor(),
+			modelScale = rag:GetModelScale(),
+			playerColor = isvector(playerColor) and Vector(playerColor.x, playerColor.y, playerColor.z) or Vector(1, 1, 1),
+			name = name,
+			appearance = istable(appearance) and table.Copy(appearance) or nil,
+			accessories = istable(accessories) and table.Copy(accessories) or accessories,
+		}
+	end
+
+	local function ApplyCorpseDisguise(ply, rag)
+		if not IsStandardHomicideCannibal(ply) then return false end
+
+		local disguise = CaptureCorpseAppearance(rag)
+		if not isstring(disguise.model) or disguise.model == "" or not util.IsValidModel(disguise.model) then return false end
+
+		if istable(disguise.appearance) and hg and hg.Appearance and isfunction(hg.Appearance.ForceApplyAppearance) then
+			if disguise.name ~= "" then disguise.appearance.AName = disguise.name end
+			hg.Appearance.ForceApplyAppearance(ply, disguise.appearance)
+		end
+
+		ply:SetModel(disguise.model)
+		ply:SetSkin(disguise.skin or 0)
+		ply:SetMaterial(disguise.material or "")
+		ply:SetColor(disguise.color or Color(255, 255, 255))
+		ply:SetModelScale(disguise.modelScale or 1, 0)
+		ply:SetSubMaterial()
+
+		for id, value in pairs(disguise.bodygroups) do
+			if ply:GetBodygroupCount(id) > 0 then ply:SetBodygroup(id, value) end
+		end
+
+		for id, material in pairs(disguise.subMaterials) do
+			if material ~= "" then ply:SetSubMaterial(id, material) end
+		end
+
+		if ply.SetPlayerColor then ply:SetPlayerColor(disguise.playerColor) end
+		ply:SetNWVector("PlayerColor", disguise.playerColor)
+		if disguise.accessories ~= nil and ply.SetNetVar then
+			ply:SetNetVar("Accessories", istable(disguise.accessories) and table.Copy(disguise.accessories) or disguise.accessories)
+		end
+		if disguise.name ~= "" then
+			ply:SetNWString("PlayerName", disguise.name)
+			if istable(ply.CurAppearance) then ply.CurAppearance.AName = disguise.name end
+		end
+
+		return true
 	end
 
 	local function ConsumeSkeleton(rag)
@@ -122,8 +221,10 @@ if SERVER then
 		if not IsCorpse(rag) then return end
 
 		if (rag.CannibalismStage or 0) >= 3 then
+			local disguised = ApplyCorpseDisguise(ply, rag)
 			ConsumeSkeleton(rag)
 			ply:EmitSound("npc/barnacle/barnacle_crunch2.wav", 100, 85)
+			if disguised then ply:ChatPrint("시체의 외형과 이름을 뒤집어썼습니다.") end
 			return
 		end
 

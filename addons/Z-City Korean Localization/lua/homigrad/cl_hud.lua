@@ -205,7 +205,7 @@ local menuPanel
 
 local colBack = Color(0,0,0)
 local surface, draw, hook, IsColor, IsValid, math, input = surface, draw, hook, IsColor, IsValid, math, input
-local function CreateRadialMenu(options_arg, bAutoClose)
+local function CreateRadialMenu(options_arg, bAutoClose, bResetCursor)
 	local sizeX, sizeY = ScrW(), ScrH()
 	hg.radialOptions = {}
 	local paining = lply.organism and lply.organism.pain and (lply.organism.pain > 100 or lply.organism.brain > 0.2) or false
@@ -238,7 +238,7 @@ local function CreateRadialMenu(options_arg, bAutoClose)
 	menuPanel:SetAlpha(0)
 	menuPanel:AlphaTo(255,0.2)
 	menuPanel.bAutoClose = bAutoClose
-	if !options_arg then input.SetCursorPos(sizeX / 2, sizeY / 2) end
+	if !options_arg or bResetCursor then input.SetCursorPos(sizeX / 2, sizeY / 2) end
 
 	function menuPanel:Close()
 		if not IsValid(menuPanel) then return end
@@ -443,7 +443,12 @@ hook.Add( "PlayerBindPress", "PlayerBindPressExample2huy", function( ply, bind, 
 
 		if (bind == "+menu") then
 			if pressed and !IsValid(MENUPANELHUYHUY) then
-				CreateRadialMenu()
+				local overrideOptions = hook.Call("HG_GetRadialMenuOverride", GAMEMODE, ply)
+				if istable(overrideOptions) and #overrideOptions > 0 then
+					CreateRadialMenu(overrideOptions, nil, true)
+				else
+					CreateRadialMenu()
+				end
 			else
 				PressRadialMenu(1)
 			end

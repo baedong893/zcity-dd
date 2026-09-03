@@ -3,6 +3,10 @@ local blackList = {
     ["weapon_zombclaws"] = true
 }
 
+local function IsWeaponHiddenFromInventory(wep)
+    return IsValid(wep) and wep.HideFromInventory == true
+end
+
 local META = getmetatable("PLAYER")
 META.inventory = {
     Weapons = {},
@@ -17,7 +21,7 @@ function hg.CreateInv(ply)
     local inv = ply.inventory
     inv.Weapons = {}
     for i, wep in ipairs(ply:GetWeapons()) do
-        if blackList[wep:GetClass()] then continue end
+        if blackList[wep:GetClass()] or IsWeaponHiddenFromInventory(wep) then continue end
         inv.Weapons[wep:GetClass()] = wep--wep.GetInfo and wep:GetInfo() or true
     end
 
@@ -40,6 +44,10 @@ function hg.RenewInv(ply, isDead)
 
     for i, wep in pairs(ply:GetWeapons()) do
         if blackList[wep:GetClass()] then continue end
+        if IsWeaponHiddenFromInventory(wep) then
+            if isDead then wep:Remove() end
+            continue
+        end
         if not isDead then
             inv.Weapons[wep:GetClass()] = wep--wep.GetInfo and wep:GetInfo() or true
         else
@@ -82,7 +90,7 @@ end)
 
 hook.Add("WeaponEquip", "homigrad-inventory", function(wep, ply)
     local inv = ply.inventory or {}
-    if blackList[wep:GetClass()] then return end
+    if blackList[wep:GetClass()] or IsWeaponHiddenFromInventory(wep) then return end
 
     wep:SetNoDraw(false)
 
@@ -109,7 +117,7 @@ end)
 hook.Add("PlayerDroppedWeapon", "homigrad-inventory", function(ply, wep)
     local inv = ply.inventory or {}
     if ply:IsNPC() then return end
-    if blackList[wep:GetClass()] then return end
+    if blackList[wep:GetClass()] or IsWeaponHiddenFromInventory(wep) then return end
     if not inv.Weapons or not inv.Weapons[wep:GetClass()] then return end
     if ply.nohook then ply.nohook = nil return end
     inv.Weapons[wep:GetClass()] = nil
@@ -359,6 +367,48 @@ local functions = {
         if not ent.inventory.Attachments[att] then return end
         ply.inventory.Attachments[#ply.inventory.Attachments + 1] = ent.inventory.Attachments[att]
         ent.inventory.Attachments[att] = nil
+    end,
+    ["Supplies"] = function(ply, ent, slot)
+        if not ent.inventory or not ent.inventory.Supplies then return end
+
+        slot = tostring(slot)
+        local class = ent.inventory.Supplies[slot]
+        if not isstring(class) or class == "" then return end
+
+        local item = ents.Create(class)
+        if not IsValid(item) then return end
+
+        local trace = hg.eyeTrace(ply, 60)
+        item:SetPos(trace and trace.HitPos or ply:EyePos())
+        item:SetAngles(ent:GetAngles())
+        item:Spawn()
+
+        -- Remove it from the crate before attempting pickup. If an equipment
+        -- slot is occupied or pickup is rejected, the item remains on the
+        -- ground instead of also remaining inside the crate.
+        ent.inventory.Supplies[slot] = nil
+
+        if item:IsWeapon() then
+            item.IsSpawned = false
+            item.init = false
+
+            if hook.Run("PlayerCanPickupWeapon", ply, item) == false then
+                item.IsSpawned = true
+                item.init = true
+                return
+            end
+
+            ply:PickupWeapon(item)
+            if not item.DontEquipInstantly then
+                timer.Simple(0, function()
+                    if IsValid(ply) and IsValid(item) and item:GetOwner() == ply then
+                        ply:SelectWeapon(item:GetClass())
+                    end
+                end)
+            end
+        elseif item.Use then
+            item:Use(ply)
+        end
     end,
     -- ["Money"] = function(ply, ent)
     --     local money = ent:GetNetVar("zb_Scrappers_RaidMoney", 0)

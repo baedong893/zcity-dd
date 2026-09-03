@@ -26,9 +26,10 @@ else
 end
 
 MODE.SCPWeapon = "swep_106_pd"
-MODE.AlphaModel = "models/patrixq5/a1base.mdl"
+MODE.MTFModel = "models/Kuge/Generic/SCP MTF ETA5/mtf-eta5_exp-pm.mdl"
+MODE.AlphaModel = MODE.MTFModel
 MODE.AlphaWeapon = "weapon_hk416"
-MODE.OmegaModel = "models/o1/o1_base.mdl"
+MODE.OmegaModel = MODE.MTFModel
 MODE.OmegaWeapon = "weapon_m249"
 MODE.SupportDelay = 5
 MODE.SCPReleaseDelay = 15

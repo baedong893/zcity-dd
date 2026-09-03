@@ -216,8 +216,8 @@ MODE.SubRoles = {
 	["traitor_cannibal"] = {
 		Name = "식인종",
 		Description = [[시체를 먹어 체력을 회복할 수 있습니다.
-시체를 끝까지 먹어 해골 상태로 만든 뒤 한 번 더 먹으면 시체와 주변의 피, 뼈, 살점 잔해가 사라집니다.
-마체테, 식인 도구, 곰덫, 마취총이 지급됩니다.]],
+	시체를 끝까지 먹어 해골 상태로 만든 뒤 한 번 더 먹으면 희생자의 외형과 이름을 뒤집어쓰고 시체와 주변의 피, 뼈, 살점 잔해가 사라집니다.
+	마체테, 식인 도구, 곰덫, 마취총, 전파 교란기가 지급됩니다.]],
 		Objective = "당신은 식인종입니다. 마체테로 희생자를 만들고 흔적도 남기지 말고 먹어 치우십시오.",
 		SpawnFunction = function(ply)
 			if not IsValid(ply) then return end
@@ -231,6 +231,7 @@ MODE.SubRoles = {
 			ply:Give("weapon_cannibalism")
 			ply:Give("weapon_beartrap_homigrad")
 			ply:Give("weapon_tranquilizer")
+			ply:Give("weapon_hg_jam")
 		end,
 	},
 	--==//
