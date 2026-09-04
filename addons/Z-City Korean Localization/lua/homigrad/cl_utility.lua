@@ -571,6 +571,7 @@ players : 1 humans, 0 bots (20 max)
 	local math_rad = math.rad
 	local util_DistanceToLine = util.DistanceToLine
 	local table_Add = table.Add
+	local closeRagdollVisibleDistanceSqr = 512 * 512
 
 	hook.Add("Think", "CanBeSeenOrNot", function()
 		--if checkcd > CurTime() then return end
@@ -603,6 +604,15 @@ players : 1 humans, 0 bots (20 max)
 			local nochange = (v == lply.FakeRagdoll) or (lply:Alive() and v == lply) or (not lply:Alive() and v == lply:GetNWEntity("spect"))
 
 			if nochange then
+				v.NotSeen = false
+				hg.seenents[#hg.seenents + 1] = v
+				continue
+			end
+
+			-- A corpse can still fill the screen while its root/pelvis is outside
+			-- the FOV test. Keep nearby ragdolls visible so their clientside hats,
+			-- armor and accessories are not removed and recreated while approaching.
+			if v.shouldTransmit and v:IsRagdoll() and origin:DistToSqr(v:GetPos()) <= closeRagdollVisibleDistanceSqr then
 				v.NotSeen = false
 				hg.seenents[#hg.seenents + 1] = v
 				continue
