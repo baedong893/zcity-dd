@@ -48,8 +48,27 @@ local function HorizontalDistanceSqr(a, b)
 	return x * x + y * y
 end
 
+local waterContents = bit.bor(CONTENTS_WATER, CONTENTS_SLIME)
+
+local function GetItemSpawnPolygon()
+	return zb.ItemSpawnArea.GetPolygon()
+end
+
+local function IsDryPosition(pos)
+	if not isvector(pos) or not util.IsInWorld(pos) then return false end
+	for _, height in ipairs({4, 36, 68}) do
+		if bit.band(util.PointContents(pos + Vector(0, 0, height)), waterContents) ~= 0 then return false end
+	end
+	return true
+end
+
+local function IsItemSpawnPosition(pos, polygon)
+	return IsDryPosition(pos) and zb.ItemSpawnArea.IsAllowed(pos, polygon)
+end
+
 local function AddUniquePosition(output, seen, pos)
 	if not isvector(pos) then return end
+	if not IsDryPosition(pos) then return end
 	local key = math.Round(pos.x / 64) .. ":" .. math.Round(pos.y / 64) .. ":" .. math.Round(pos.z / 64)
 	if seen[key] then return end
 	seen[key] = true
@@ -74,12 +93,13 @@ local function BuildMapPositionCache()
 	-- RandomSpawns alone are enough for players, but not for field loot or for
 	-- measuring the playable area. Always sample the navmesh when one exists.
 	local navAreas = navmesh.GetAllNavAreas() or {}
-	local step = math.max(math.ceil(#navAreas / 256), 1)
+	local step = math.max(math.ceil(#navAreas / 512), 1)
 	for index = 1, #navAreas, step do
 		local area = navAreas[index]
-		if area and area:IsValid() then
+		if area and area:IsValid() and not area:IsUnderwater() then
 			AddUniquePosition(cachedMapPositions, seen, area:GetCenter())
 		end
+		if #cachedMapPositions >= 512 then break end
 	end
 
 	for _, class in ipairs(defaultSpawnClasses) do
@@ -98,6 +118,18 @@ local function BuildMapPositionCache()
 
 	return cachedMapPositions
 end
+
+hook.Add("ZB_MapPointsSaved", "ZCityBattlegroundsInvalidateSpawnPoints", function(pointGroup)
+	if pointGroup ~= "RandomSpawns" and pointGroup ~= "Spawnpoint" then return end
+	cachedMapName = nil
+	table.Empty(cachedMapPositions)
+end)
+
+hook.Add("ZB_Area2DSaved", "ZCityBattlegroundsUpdateItemSpawnArea", function(areaId, polygon)
+	if areaId ~= zb.ItemSpawnArea.ID then return end
+	MODE.saved = MODE.saved or {}
+	MODE.saved.ItemSpawnPolygon = polygon or {}
+end)
 
 local function CalculateInitialZone(positions)
 	if #positions == 0 then return vector_origin, 1800 end
@@ -168,6 +200,8 @@ local function FindFieldLootPosition(pos)
 	if not groundTrace.Hit or groundTrace.HitNormal.z < 0.55 then return end
 
 	local spawnPos = groundTrace.HitPos + groundTrace.HitNormal * 14
+	local polygon = MODE.saved and MODE.saved.ItemSpawnPolygon or GetItemSpawnPolygon()
+	if not IsItemSpawnPosition(spawnPos, polygon) then return end
 	local clearance = util.TraceHull({
 		start = spawnPos,
 		endpos = spawnPos,
@@ -177,6 +211,28 @@ local function FindFieldLootPosition(pos)
 	})
 	if clearance.StartSolid or clearance.AllSolid then return end
 
+	return spawnPos
+end
+
+local function FindPlayerSpawnPosition(pos)
+	local groundTrace = util.TraceLine({
+		start = pos + Vector(0, 0, 192),
+		endpos = pos - Vector(0, 0, 1024),
+		mask = MASK_SOLID_BRUSHONLY
+	})
+	if not groundTrace.Hit or groundTrace.HitNormal.z < 0.55 then return end
+
+	local spawnPos = groundTrace.HitPos + groundTrace.HitNormal * 4
+	if not IsDryPosition(spawnPos) then return end
+
+	local clearance = util.TraceHull({
+		start = spawnPos,
+		endpos = spawnPos,
+		mins = Vector(-16, -16, 0),
+		maxs = Vector(16, 16, 72),
+		mask = MASK_PLAYERSOLID
+	})
+	if clearance.StartSolid or clearance.AllSolid or clearance.Hit then return end
 	return spawnPos
 end
 
@@ -199,6 +255,22 @@ local function BuildFieldLootPositions(count)
 	for _, base in ipairs(bases) do
 		AddPosition(FindFieldLootPosition(base))
 		if #output >= count then return output end
+	end
+
+	-- A configured item area may occupy a part of the map that was skipped by
+	-- the general-purpose position cache. Scan nav areas cheaply by XY first,
+	-- then trace only candidates that lie inside the item boundary.
+	local itemPolygon = MODE.saved and MODE.saved.ItemSpawnPolygon or GetItemSpawnPolygon()
+	if #itemPolygon >= 3 then
+		for _, area in ipairs(navmesh.GetAllNavAreas() or {}) do
+			if area and area:IsValid() and not area:IsUnderwater() then
+				local center = area:GetCenter()
+				if zb.ItemSpawnArea.IsAllowed(center, itemPolygon) then
+					AddPosition(FindFieldLootPosition(center))
+					if #output >= count then return output end
+				end
+			end
+		end
 	end
 
 	-- Maps without a navmesh may expose only a handful of spawn entities. Fill
@@ -229,7 +301,7 @@ local function SpawnCompatibleAmmo(mode, weaponClass, weaponPos)
 
 	local angle = math.Rand(0, math.pi * 2)
 	local nearby = weaponPos + Vector(math.cos(angle) * 28, math.sin(angle) * 28, 0)
-	local ammoPos = FindFieldLootPosition(nearby) or nearby + Vector(0, 0, 4)
+	local ammoPos = FindFieldLootPosition(nearby) or weaponPos + Vector(0, 0, 4)
 	local magazineCount = math.random(1, 5)
 	local reserveAmmoCount = clipSize * magazineCount
 
@@ -335,9 +407,42 @@ local function PickPositionInsideZone(zone, edgeScale)
 	end
 
 	if #candidates > 0 then return table.Random(candidates) end
-	local angle = math.Rand(0, math.pi * 2)
-	local distance = math.sqrt(math.Rand(0, 1)) * allowedRadius
-	return FindGround(zone.Center + Vector(math.cos(angle) * distance, math.sin(angle) * distance, 0))
+	for _ = 1, 16 do
+		local angle = math.Rand(0, math.pi * 2)
+		local distance = math.sqrt(math.Rand(0, 1)) * allowedRadius
+		local ground = FindGround(zone.Center + Vector(math.cos(angle) * distance, math.sin(angle) * distance, 0))
+		if IsDryPosition(ground) then return ground end
+	end
+
+	if #positions > 0 then return table.Random(positions) end
+	return FindGround(zone.Center)
+end
+
+local function PickItemPositionInsideZone(zone, edgeScale)
+	local polygon = MODE.saved and MODE.saved.ItemSpawnPolygon or GetItemSpawnPolygon()
+	if #polygon < 3 then return PickPositionInsideZone(zone, edgeScale) end
+
+	local allowedRadius = zone.Radius * (edgeScale or 0.8)
+	local allowedRadiusSqr = allowedRadius * allowedRadius
+	local candidates = {}
+	for _, pos in ipairs(BuildMapPositionCache()) do
+		if HorizontalDistanceSqr(pos, zone.Center) <= allowedRadiusSqr and IsItemSpawnPosition(pos, polygon) then
+			candidates[#candidates + 1] = pos
+		end
+	end
+
+	if #candidates > 0 then return table.Random(candidates) end
+
+	for _, area in ipairs(navmesh.GetAllNavAreas() or {}) do
+		if area and area:IsValid() and not area:IsUnderwater() then
+			local pos = area:GetCenter()
+			if HorizontalDistanceSqr(pos, zone.Center) <= allowedRadiusSqr and IsItemSpawnPosition(pos, polygon) then
+				candidates[#candidates + 1] = pos
+			end
+		end
+	end
+
+	return #candidates > 0 and table.Random(candidates) or nil
 end
 
 local function BuildAirdropContents()
@@ -363,7 +468,9 @@ local function SpawnAirdrop(mode)
 	local zone = mode.saved.Zone
 	if not zone then return end
 
-	local target = FindGround(PickPositionInsideZone(zone, 0.72))
+	local selected = PickItemPositionInsideZone(zone, 0.72)
+	if not selected then return end
+	local target = FindGround(selected)
 	local upward = util.TraceLine({
 		start = target + Vector(0, 0, 32),
 		endpos = target + Vector(0, 0, 1000),
@@ -390,18 +497,23 @@ end
 local function ChooseNextZone(zone, scale)
 	local targetRadius = math.max(zone.Radius * scale, minimumZoneRadius)
 	local maximumOffset = math.max(zone.Radius - targetRadius, 0)
-	local angle = math.Rand(0, math.pi * 2)
-	local distance = math.sqrt(math.Rand(0, 1)) * maximumOffset
-	local targetCenter = zone.Center + Vector(math.cos(angle) * distance, math.sin(angle) * distance, 0)
-	return targetCenter, targetRadius
+	local candidates = {}
+	local maximumOffsetSqr = maximumOffset * maximumOffset
+	for _, pos in ipairs(BuildMapPositionCache()) do
+		if HorizontalDistanceSqr(pos, zone.Center) <= maximumOffsetSqr then candidates[#candidates + 1] = pos end
+	end
+
+	return (#candidates > 0 and table.Random(candidates) or zone.Center), targetRadius
 end
 
 local function StartRedZone(mode)
 	local zone = mode.saved.Zone
 	if not zone then return end
+	local center = PickPositionInsideZone(zone, 0.72)
+	if not center then return end
 
 	local red = {
-		Center = PickPositionInsideZone(zone, 0.72),
+		Center = center,
 		Radius = math.Clamp(zone.Radius * 0.18, 280, 650),
 		EndTime = CurTime() + mode.RedZoneDuration,
 		BombardStart = CurTime() + mode.RedZoneWarningDelay,
@@ -418,9 +530,17 @@ local function StartRedZone(mode)
 end
 
 local function ExplodeInRedZone(red)
-	local angle = math.Rand(0, math.pi * 2)
-	local distance = math.sqrt(math.Rand(0, 1)) * red.Radius
-	local position = FindGround(red.Center + Vector(math.cos(angle) * distance, math.sin(angle) * distance, 0)) + Vector(0, 0, 12)
+	local position
+	for _ = 1, 12 do
+		local angle = math.Rand(0, math.pi * 2)
+		local distance = math.sqrt(math.Rand(0, 1)) * red.Radius
+		local candidate = FindGround(red.Center + Vector(math.cos(angle) * distance, math.sin(angle) * distance, 0))
+		if IsDryPosition(candidate) then
+			position = candidate + Vector(0, 0, 12)
+			break
+		end
+	end
+	if not position then position = FindGround(red.Center) + Vector(0, 0, 12) end
 
 	local effect = EffectData()
 	effect:SetOrigin(position)
@@ -441,6 +561,7 @@ function MODE:Intermission()
 	ClearGlobalState()
 	game.CleanUpMap()
 
+	self.saved.ItemSpawnPolygon = GetItemSpawnPolygon()
 	local positions = BuildMapPositionCache()
 	local center, radius = CalculateInitialZone(positions)
 	self.saved.Zone = {
@@ -457,7 +578,12 @@ function MODE:Intermission()
 	self.saved.RedZone = nil
 	self.saved.Winner = nil
 
-	local spawnPool = table.Copy(positions)
+	local spawnPool = {}
+	local spawnSeen = {}
+	for _, pos in ipairs(positions) do
+		local spawnPos = FindPlayerSpawnPosition(pos)
+		if spawnPos then AddUniquePosition(spawnPool, spawnSeen, spawnPos) end
+	end
 	table.Shuffle(spawnPool)
 	local spawnIndex = 0
 	for _, ply in player.Iterator() do

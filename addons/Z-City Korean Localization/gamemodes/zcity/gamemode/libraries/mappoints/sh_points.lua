@@ -13,6 +13,15 @@ zb.Points.RandomSpawns = zb.Points.RandomSpawns or {}
 zb.Points.RandomSpawns.Color = Color(122,122,0)
 zb.Points.RandomSpawns.Name = "RandomSpawns"
 
+-- Named 2D polygons share this storage group. Individual systems select an
+-- area by its areaId instead of registering mode-specific point groups here.
+zb.Points.ZCITY_2D_AREAS = zb.Points.ZCITY_2D_AREAS or {}
+zb.Points.ZCITY_2D_AREAS.Color = Color(55, 210, 95)
+zb.Points.ZCITY_2D_AREAS.Name = "Z-City 2D Areas"
+
+-- Remove the temporary mode-specific registration after Lua auto-refresh.
+zb.Points.BATTLEGROUNDS_PLAY_AREA = nil
+
 if SERVER then
     util.AddNetworkString("zb_getallpoints")
     util.AddNetworkString("zb_getspecificpoints")

@@ -50,6 +50,7 @@ function zb.SaveMapPoints( pointGroup, pointsData ) -- Сохранаяет вс
     end
 
     file.Write( "zbattle/mappoints/" .. map .. "/" .. pointGroup .. ".json", util.TableToJSON( cachedPoints, true ) )
+    hook.Run("ZB_MapPointsSaved", pointGroup, cachedPoints)
 end
 
 -- pointData = { pos = Vector(), ang = Angle() } // Таблица пойнта
@@ -189,19 +190,30 @@ function zb.SendPoints()
     net.Send(rf)
 end
 
-function zb.SendSpecificPointsToPly(ply, pointGroup, shouldprint)
+function zb.SendPointGroup(pointGroup, points, recipient)
+    if not zb.Points[pointGroup] then return false end
+
     net.Start("zb_getspecificpoints")
         net.WriteString(pointGroup)
-        net.WriteTable(zb.GetAllPoints()[pointGroup])
-    if IsValid(ply) then    
-        net.Send(ply)
-        
-        if shouldprint then
-            ply:ChatPrint("Points: Points transferred")
-        end
+        net.WriteTable(points or zb.GetMapPoints(pointGroup) or {})
+
+    if IsValid(recipient) then
+        net.Send(recipient)
     else
         net.Broadcast()
     end
+
+    return true
+end
+
+function zb.SendSpecificPointsToPly(ply, pointGroup, shouldprint)
+    if not zb.SendPointGroup(pointGroup, nil, ply) then return false end
+
+    if IsValid(ply) and shouldprint then
+        ply:ChatPrint("Points: Points transferred")
+    end
+
+    return true
 end
 
 local angZero = Angle(0,0,0)

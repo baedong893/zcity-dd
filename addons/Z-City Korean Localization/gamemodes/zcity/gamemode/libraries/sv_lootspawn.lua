@@ -620,7 +620,8 @@ hook.Add("Boxes Think", "SpawnBoxes", function()
 	end
 
 	local spawnPos = trace.HitPos + vector_up * 32 - trace.Normal * 10
-	
+	if zb.ItemSpawnArea and not zb.ItemSpawnArea.IsAllowed(spawnPos) then return end
+
 	if not CurrentRound().noBoxes then
 		for k, ply in ipairs(ents.FindInBox(spawnPos - vec_dist,spawnPos + vec_dist)) do
 			if not ply:IsPlayer() then continue end
