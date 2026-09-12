@@ -17,6 +17,7 @@ SWEP.Secondary.Automatic = false
 SWEP.Secondary.Ammo = "none"
 
 function SWEP:Convert()
+	if not SERVER then return end
 	local owner = self.Owner
 	if IsValid(owner) and owner:IsPlayer() then
 		local wep = owner:Give("infinitygauntlet")

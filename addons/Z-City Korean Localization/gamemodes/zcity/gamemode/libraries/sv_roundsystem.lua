@@ -87,7 +87,7 @@ end
 function zb.AwardRoundWins(mode)
 	if zb.LastWinAwardRoundCount == zb.Roundscount then return end
 	zb.LastWinAwardRoundCount = zb.Roundscount
-	if mode and winStreakExcludedModes[mode.name] then
+	if mode and (mode.TrackRoundWins == false or winStreakExcludedModes[mode.name]) then
 		zb.RoundWinParticipants = nil
 		return
 	end
@@ -348,7 +348,7 @@ function zb:PreRound()
 		return
 	end
 
-	if ((((zb.Roundscount or 0) > 15) and !GetConVar("zb_dev"):GetBool()) or ( (activePlayers >= minPlayers) and zb.ROUND_STATE == 0 and zb.CheckRTVVotes() )) and !(zb.RoundsLeft and zb.CROUND == "cstrike") then
+	if not (mode and mode.DisableAutoRTV) and ((((zb.Roundscount or 0) > 15) and !GetConVar("zb_dev"):GetBool()) or ( (activePlayers >= minPlayers) and zb.ROUND_STATE == 0 and zb.CheckRTVVotes() )) and !(zb.RoundsLeft and zb.CROUND == "cstrike") then
 		zb.StartRTV(20)
 		zb.ROUND_STATE = 0
 		return
@@ -714,6 +714,7 @@ function zb.GetChance(name, addtbl)
 	local tbl = zb.modes[mode]
 
 	local newtbl = tbl.Types and tbl.Types[name] or tbl
+	if tbl.ManualOnly or newtbl.ManualOnly then return 0 end
 
 	return newtbl.ChanceFunction and newtbl:ChanceFunction(addtbl or {}) or zb.ModesChances[name] or newtbl.Chance or 0.1
 end

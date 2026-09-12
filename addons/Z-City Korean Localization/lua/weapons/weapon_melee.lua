@@ -926,6 +926,7 @@ function SWEP:BehindAttack(ent)
 end
 
 function SWEP:PunchPlayer(ent, attacktype, trnormal, dmg)
+    if hook.Run("HG_AllowDamageEffects", ent) == false then return end
     if ent:IsPlayer() or ent:IsRagdoll() then 
         local ply = hg.RagdollOwner(ent) or ent
 
@@ -1262,7 +1263,7 @@ function SWEP:CustomThink()
 
                 local phys = ent:GetPhysicsObjectNum(trace.PhysicsBone or 0)
 
-                if IsValid(phys) then
+                if IsValid(phys) and hook.Run("HG_AllowDamageEffects", ent) ~= false then
                     phys:ApplyForceOffset(trace.Normal * math.min(dmg, 25) * 400, trace.HitPos)
                 end
 
@@ -1310,7 +1311,7 @@ function SWEP:CustomThink()
 
             ent:PrecacheGibs()
 
-            if SERVER then -- ранбуст для супербойцов and (ent:OnGround() or ent.organism and ent.organism.superfighter)
+            if SERVER and hook.Run("HG_AllowDamageEffects", ent) ~= false then -- Target knockback
                 local vec = trace.Normal * math.min(self.DamageSecondary  * 0.5, 20)
                 vec[3] = 0
                 
@@ -1360,7 +1361,7 @@ function SWEP:CustomThink()
 
                 self:PunchPlayer(ent, true, trace.Normal, dmg)
 
-                if IsValid(phys) then
+                if IsValid(phys) and hook.Run("HG_AllowDamageEffects", ent) ~= false then
                     phys:ApplyForceOffset(trace.Normal * math.min(dmg, 25) * 400, trace.HitPos)
                 end
 
@@ -1817,7 +1818,7 @@ function SWEP:NPCThink()
 					trEnt:TakeDamageInfo(dmginfo)
 					npc:EmitSound(self.AttackHitFlesh, 60)
 
-					if trEnt:IsPlayer() then
+					if trEnt:IsPlayer() and hook.Run("HG_AllowDamageEffects", trEnt) ~= false then
 						hg.AddForceRag(trEnt, trace.PhysicsBone or 0, trace.Normal * math.min(dmg, 25) * 400, 0.5)
 
 						self:PunchPlayer(trEnt, false, trace.Normal, dmg)

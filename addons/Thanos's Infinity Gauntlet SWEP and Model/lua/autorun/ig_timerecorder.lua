@@ -1,5 +1,12 @@
 if !SERVER then return end
 
+-- Release the previous recorder's state before Lua refresh replaces its locals.
+if IG_SetTimeFlow then IG_SetTimeFlow(true) end
+-- Retire the previous per-gauntlet timers so a hotload cannot end the next cast early.
+for name in pairs(timer.GetTable()) do
+	if string.StartWith(name, "IG_ZCityTimeStop_") then timer.Remove(name) end
+end
+
 local PLY = FindMetaTable("Player")
 local ENT = FindMetaTable("Entity")
 
@@ -28,6 +35,7 @@ local recordedEvents = {}
 local timeRecorderCoroute
 
 local timeFlowing = true
+SetGlobalBool("IG_TimeStopped", false)
 
 local recording = true
 local function Recording()
@@ -687,22 +695,42 @@ if SERVER then
 		["sky_camera"] = true,
 		["ai_ally_speech_manager"] = true,
 	}
-	function IG_SetTimeFlow(bool)
+	local timeStopTimer = "IG_TimeStopResume"
+	function IG_SetTimeFlow(bool, duration)
+		-- Repeated casts must not keep extending an already active stop.
+		if !bool and !timeFlowing then return end
 		timeFlowing = bool
+		SetGlobalBool("IG_TimeStopped", !bool)
+		timer.Remove(timeStopTimer)
 		if bool then
 			RunConsoleCommand("phys_timescale","1")
 			for k,v in ipairs(ents.GetAll()) do
 				if v.wasTimeFrozen then
-					v.wasTimeFrozen = nil
 					if !v:IG_MotionEnabled() then
 						v:IG_EnableMotion(true)
 					end
+					v.wasTimeFrozen = nil
 				end
 			end
 		else
+			if duration then
+				timer.Create(timeStopTimer, duration, 1, function()
+					IG_SetTimeFlow(true)
+				end)
+			end
 			RunConsoleCommand("phys_timescale","0")
 		end
 	end
+
+	hook.Add("PreCleanupMap", "IG_ResumeTime", function()
+		IG_SetTimeFlow(true)
+	end)
+	hook.Add("OnReloaded", "IG_ResumeTime", function()
+		IG_SetTimeFlow(true)
+	end)
+	hook.Add("ZB_EndRound", "IG_ResumeTime", function()
+		if !timeFlowing then IG_SetTimeFlow(true) end
+	end)
 	
 	function IG_IsTimeFlowing()
 		return timeFlowing
@@ -714,7 +742,7 @@ if SERVER then
 				if !timeStopBlacklist[v:GetClass()] and (v:IG_MotionEnabled()) and !v:HasInfinityStone(IG_STONE_TIME) and (v:IsPlayer() or v:IsNPC() or v:GetPhysicsObject():IsValid()) then
 					v:IG_EnableMotion(false)
 					v.wasTimeFrozen = true
-				elseif v:IsNPC() then
+				elseif v:IsNPC() and v.wasTimeFrozen then
 					v:SetSchedule(SCHED_NPC_FREEZE)
 				end
 			end

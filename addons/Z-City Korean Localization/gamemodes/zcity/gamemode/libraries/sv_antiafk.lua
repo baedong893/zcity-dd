@@ -1,7 +1,7 @@
 --
 local AfkToSpectTime = 300
 
-local function stopAFK(ply)
+function zb.ResetAFK(ply)
     if not IsValid(ply) then return end
 
     ply.afkTime = 0
@@ -17,6 +17,14 @@ end)
 
 
 timer.Create("ZB_AntiAfkThink",10,0,function()
+    local mode = CurrentRound and CurrentRound()
+    if mode and mode.DisableAFK then
+        for _, ply in player.Iterator() do
+            zb.ResetAFK(ply)
+        end
+        return
+    end
+
     if GetConVar("zb_dev"):GetBool() then return end
 
     for k,ply in player.Iterator() do
@@ -45,8 +53,8 @@ timer.Create("ZB_AntiAfkThink",10,0,function()
     end
 end)
 
-hook.Add("KeyPress", "ZB_AnitAfk", stopAFK)
-hook.Add("HG_PlayerSay", "ZB_AnitAfk", stopAFK)
+hook.Add("KeyPress", "ZB_AnitAfk", zb.ResetAFK)
+hook.Add("HG_PlayerSay", "ZB_AnitAfk", zb.ResetAFK)
 
 
 --[[                                                   I HATE MY LIFE SOO MUCH        

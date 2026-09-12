@@ -66,7 +66,7 @@ function pd106.CreateVisualPuddle(pos, className, lifeTime)
 	return puddle
 end
 
-function pd106.PutInPD(ply, puddle)
+function pd106.PutInPD(ply, puddle, abilityWeapon)
 	if not IsValid(ply) or not ply:IsPlayer() then return false end
 	if ply:IsDreaming() or IsPlayerBusyWithPD(ply) then return false end
 
@@ -92,6 +92,25 @@ function pd106.PutInPD(ply, puddle)
 	local startPos = ply:GetPos()
 	local startTime = CurTime()
 	local timerName = ply:SteamID() .. "_106PD"
+	local canceled = false
+	local cancelEntry
+	if IsValid(abilityWeapon) then
+		cancelEntry = function()
+			if canceled then return end
+			canceled = true
+			timer.Remove(timerName)
+			if IsValid(abilityWeapon) then abilityWeapon.S106_CancelPDEntry = nil end
+			if IsValid(ply) then
+				ply:SetPos(startPos)
+				ply:SetMoveType(MOVETYPE_WALK)
+				ply:Freeze(false)
+				ply:SetNoTarget(false)
+				ply:SetAbsVelocity(vector_origin)
+			end
+			SafeClosePuddle(puddle, 0)
+		end
+		abilityWeapon.S106_CancelPDEntry = cancelEntry
+	end
 
 	timer.Create(timerName, 0, 0, function()
 		if not IsValid(ply) then
@@ -107,6 +126,9 @@ function pd106.PutInPD(ply, puddle)
 	end)
 
 	timer.Simple(2, function()
+		-- A canceled entry must never fire its delayed dream transition later.
+		if canceled then return end
+		if IsValid(abilityWeapon) then abilityWeapon.S106_CancelPDEntry = nil end
 		timer.Remove(timerName)
 		if not IsValid(ply) then return end
 

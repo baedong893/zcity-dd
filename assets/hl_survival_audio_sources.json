@@ -1,0 +1,24 @@
+{
+  "format": "PCM signed 16-bit, 44100 Hz, stereo WAV",
+  "clips": [
+    {
+      "output": "addons/Z-City Korean Localization/sound/zcity/hl_survival/ravenholm_intro_full.wav",
+      "source_asset": "Half-Life 2/hl2/hl2_sound_misc_dir.vpk: sound/music/hl2_song7.mp3",
+      "reference_video": "https://www.youtube.com/watch?v=ryQMSgFYLLU",
+      "reference_music_start_seconds": 4.025,
+      "duration_seconds": 50.755918367347,
+      "intro_screen_seconds": 6,
+      "processing": "Full original track, no truncation; gain 0.6 matches d1_town.Music_Intro in scripts/level_sounds_ravenholm.txt.",
+      "verification": "Reference at 5.2, 7.2, 10.2 and 12.2 seconds matches the source at a consistent 4.025-second offset (normalized waveform correlation 0.878 to 0.984)."
+    },
+    {
+      "output": "addons/Z-City Korean Localization/sound/zcity/hl_survival/city17_welcome_v2.wav",
+      "source": "https://www.youtube.com/watch?v=q2wUjcjYSkM",
+      "start_seconds": 115.35,
+      "end_seconds": 118.65,
+      "duration_seconds": 3.3,
+      "processing": "Existing full welcome sentence (6x gain, 8 ms fade-in and 30 ms fade-out), then loudness normalization targeting -14 LUFS and -1.5 dBTP. Measured RMS increased from -24.4 to -17.6 dBFS.",
+      "note": "Includes the beginning of the welcome sentence just before the approximate 1:56 timestamp. New filename avoids an already cached quieter sound."
+    }
+  ]
+}

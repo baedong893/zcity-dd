@@ -37,9 +37,9 @@ local airdropAttachments = {
 	"ent_att_supressor2"
 }
 
-local function IsBattlegroundsActive()
+local function IsBattlegroundsActive(mode)
 	local round = CurrentRound and CurrentRound()
-	return zb.ROUND_STATE == 1 and round and round.name == MODE.name
+	return zb.ROUND_STATE == 1 and round == mode
 end
 
 local function HorizontalDistanceSqr(a, b)
@@ -127,8 +127,12 @@ end)
 
 hook.Add("ZB_Area2DSaved", "ZCityBattlegroundsUpdateItemSpawnArea", function(areaId, polygon)
 	if areaId ~= zb.ItemSpawnArea.ID then return end
-	MODE.saved = MODE.saved or {}
-	MODE.saved.ItemSpawnPolygon = polygon or {}
+	for _, mode in pairs(zb.modes or {}) do
+		if mode.ItemSpawnAreaOwner == MODE.name then
+			mode.saved = mode.saved or {}
+			mode.saved.ItemSpawnPolygon = polygon or {}
+		end
+	end
 end)
 
 local function CalculateInitialZone(positions)
@@ -191,7 +195,7 @@ local function FindGround(pos)
 	return trace.Hit and trace.HitPos or pos
 end
 
-local function FindFieldLootPosition(pos)
+local function FindFieldLootPosition(pos, mode)
 	local groundTrace = util.TraceLine({
 		start = pos + Vector(0, 0, 192),
 		endpos = pos - Vector(0, 0, 1024),
@@ -200,7 +204,7 @@ local function FindFieldLootPosition(pos)
 	if not groundTrace.Hit or groundTrace.HitNormal.z < 0.55 then return end
 
 	local spawnPos = groundTrace.HitPos + groundTrace.HitNormal * 14
-	local polygon = MODE.saved and MODE.saved.ItemSpawnPolygon or GetItemSpawnPolygon()
+	local polygon = mode.saved and mode.saved.ItemSpawnPolygon or GetItemSpawnPolygon()
 	if not IsItemSpawnPosition(spawnPos, polygon) then return end
 	local clearance = util.TraceHull({
 		start = spawnPos,
@@ -236,7 +240,7 @@ local function FindPlayerSpawnPosition(pos)
 	return spawnPos
 end
 
-local function BuildFieldLootPositions(count)
+local function BuildFieldLootPositions(mode, count)
 	local bases = table.Copy(BuildMapPositionCache())
 	if #bases == 0 then return {} end
 	table.Shuffle(bases)
@@ -253,20 +257,20 @@ local function BuildFieldLootPositions(count)
 	end
 
 	for _, base in ipairs(bases) do
-		AddPosition(FindFieldLootPosition(base))
+		AddPosition(FindFieldLootPosition(base, mode))
 		if #output >= count then return output end
 	end
 
 	-- A configured item area may occupy a part of the map that was skipped by
 	-- the general-purpose position cache. Scan nav areas cheaply by XY first,
 	-- then trace only candidates that lie inside the item boundary.
-	local itemPolygon = MODE.saved and MODE.saved.ItemSpawnPolygon or GetItemSpawnPolygon()
+	local itemPolygon = mode.saved and mode.saved.ItemSpawnPolygon or GetItemSpawnPolygon()
 	if #itemPolygon >= 3 then
 		for _, area in ipairs(navmesh.GetAllNavAreas() or {}) do
 			if area and area:IsValid() and not area:IsUnderwater() then
 				local center = area:GetCenter()
 				if zb.ItemSpawnArea.IsAllowed(center, itemPolygon) then
-					AddPosition(FindFieldLootPosition(center))
+					AddPosition(FindFieldLootPosition(center, mode))
 					if #output >= count then return output end
 				end
 			end
@@ -282,7 +286,7 @@ local function BuildFieldLootPositions(count)
 		local angle = math.Rand(0, math.pi * 2)
 		local distance = math.Rand(96, 640)
 		local candidate = base + Vector(math.cos(angle) * distance, math.sin(angle) * distance, 0)
-		AddPosition(FindFieldLootPosition(candidate))
+		AddPosition(FindFieldLootPosition(candidate, mode))
 	end
 
 	return output
@@ -301,7 +305,7 @@ local function SpawnCompatibleAmmo(mode, weaponClass, weaponPos)
 
 	local angle = math.Rand(0, math.pi * 2)
 	local nearby = weaponPos + Vector(math.cos(angle) * 28, math.sin(angle) * 28, 0)
-	local ammoPos = FindFieldLootPosition(nearby) or weaponPos + Vector(0, 0, 4)
+	local ammoPos = FindFieldLootPosition(nearby, mode) or weaponPos + Vector(0, 0, 4)
 	local magazineCount = math.random(1, 5)
 	local reserveAmmoCount = clipSize * magazineCount
 
@@ -364,11 +368,11 @@ local function StartFieldLootSpawn(mode)
 		mode.InitialFieldLootMinimum,
 		mode.InitialFieldLootMaximum
 	)
-	local positions = BuildFieldLootPositions(desired)
+	local positions = BuildFieldLootPositions(mode, desired)
 	local nextPosition = 1
 
 	local function SpawnBatch()
-		if not IsBattlegroundsActive() then
+		if not IsBattlegroundsActive(mode) then
 			timer.Remove(fieldLootTimerName)
 			return
 		end
@@ -418,8 +422,8 @@ local function PickPositionInsideZone(zone, edgeScale)
 	return FindGround(zone.Center)
 end
 
-local function PickItemPositionInsideZone(zone, edgeScale)
-	local polygon = MODE.saved and MODE.saved.ItemSpawnPolygon or GetItemSpawnPolygon()
+local function PickItemPositionInsideZone(mode, zone, edgeScale)
+	local polygon = mode.saved and mode.saved.ItemSpawnPolygon or GetItemSpawnPolygon()
 	if #polygon < 3 then return PickPositionInsideZone(zone, edgeScale) end
 
 	local allowedRadius = zone.Radius * (edgeScale or 0.8)
@@ -465,10 +469,11 @@ local function BuildAirdropContents()
 end
 
 local function SpawnAirdrop(mode)
+	if mode.EnableAirdrops == false then return end
 	local zone = mode.saved.Zone
 	if not zone then return end
 
-	local selected = PickItemPositionInsideZone(zone, 0.72)
+	local selected = PickItemPositionInsideZone(mode, zone, 0.72)
 	if not selected then return end
 	local target = FindGround(selected)
 	local upward = util.TraceLine({
@@ -491,7 +496,7 @@ local function SpawnAirdrop(mode)
 
 	mode.saved.Airdrops = mode.saved.Airdrops or {}
 	mode.saved.Airdrops[#mode.saved.Airdrops + 1] = crate
-	PrintMessage(HUD_PRINTTALK, "[배틀그라운드] 안전 구역 안에 공중 보급이 투하되었습니다.")
+	PrintMessage(HUD_PRINTTALK, "[" .. mode:GetRoundPrintName() .. "] 안전 구역 안에 공중 보급이 투하되었습니다.")
 end
 
 local function ChooseNextZone(zone, scale)
@@ -507,6 +512,7 @@ local function ChooseNextZone(zone, scale)
 end
 
 local function StartRedZone(mode)
+	if mode.EnableRedZones == false then return end
 	local zone = mode.saved.Zone
 	if not zone then return end
 	local center = PickPositionInsideZone(zone, 0.72)
@@ -526,7 +532,7 @@ local function StartRedZone(mode)
 	SetGlobalFloat(GLOBAL_PREFIX .. "RedRadius", red.Radius)
 	SetGlobalFloat(GLOBAL_PREFIX .. "RedEnd", red.EndTime)
 	SetGlobalFloat(GLOBAL_PREFIX .. "RedBombardStart", red.BombardStart)
-	PrintMessage(HUD_PRINTTALK, "[배틀그라운드] 레드존이 지정되었습니다. 폭격에 주의하십시오.")
+	PrintMessage(HUD_PRINTTALK, "[" .. mode:GetRoundPrintName() .. "] 레드존이 지정되었습니다. 폭격에 주의하십시오.")
 end
 
 local function ExplodeInRedZone(red)
@@ -564,7 +570,7 @@ function MODE:Intermission()
 	self.saved.ItemSpawnPolygon = GetItemSpawnPolygon()
 	local positions = BuildMapPositionCache()
 	local center, radius = CalculateInitialZone(positions)
-	self.saved.Zone = {
+	self.saved.Zone = self.EnableSafeZone ~= false and {
 		Center = center,
 		Radius = radius,
 		TargetCenter = center,
@@ -572,7 +578,7 @@ function MODE:Intermission()
 		Phase = 1,
 		State = "waiting",
 		StateEnd = 0
-	}
+	} or nil
 	self.saved.Airdrops = {}
 	self.saved.FieldLoot = {}
 	self.saved.RedZone = nil
@@ -629,19 +635,26 @@ end
 function MODE:RoundStart()
 	local now = CurTime()
 	local zone = self.saved.Zone
-	if not zone then
+	if self.EnableSafeZone ~= false and not zone then
 		local center, radius = CalculateInitialZone(BuildMapPositionCache())
 		zone = {Center = center, Radius = radius, TargetCenter = center, TargetRadius = radius, Phase = 1, State = "waiting"}
 		self.saved.Zone = zone
 	end
 
-	zone.State = "waiting"
-	zone.StateEnd = now + (self.ZonePhases[1].Wait or 0)
-	self.saved.NextRedZone = now + self.FirstRedZoneDelay
-	self.saved.NextAirdrop = now + self.FirstAirdropDelay
-	SyncZone(zone)
+	if self.EnableSafeZone ~= false then
+		zone.State = "waiting"
+		zone.StateEnd = now + (self.ZonePhases[1].Wait or 0)
+		SyncZone(zone)
+	else
+		self.saved.Zone = nil
+		ClearGlobalState()
+	end
+	self.saved.NextRedZone = self.EnableRedZones ~= false and (now + self.FirstRedZoneDelay) or nil
+	self.saved.NextAirdrop = self.EnableAirdrops ~= false and (now + self.FirstAirdropDelay) or nil
 	StartFieldLootSpawn(self)
-	PrintMessage(HUD_PRINTTALK, "[배틀그라운드] 최후의 한 명이 살아남을 때까지 파밍하고 싸우십시오.")
+	if self.AnnounceStartInChat ~= false then
+		PrintMessage(HUD_PRINTTALK, "[" .. self:GetRoundPrintName() .. "] " .. self:GetStartMessage())
+	end
 end
 
 function MODE:CheckAlivePlayers()
@@ -678,7 +691,7 @@ function MODE:BoringRoundFunction()
 end
 
 function MODE:RoundThink()
-	if not IsBattlegroundsActive() then return end
+	if not IsBattlegroundsActive(self) then return end
 	local now = CurTime()
 	local zone = self.saved.Zone
 	if not zone then return end
@@ -692,7 +705,7 @@ function MODE:RoundThink()
 			zone.TargetCenter, zone.TargetRadius = ChooseNextZone(zone, phase.Scale)
 			zone.StateStart = now
 			zone.StateEnd = now + phase.Shrink
-			PrintMessage(HUD_PRINTTALK, "[배틀그라운드] 자기장이 줄어들기 시작합니다.")
+			PrintMessage(HUD_PRINTTALK, "[" .. self:GetRoundPrintName() .. "] 자기장이 줄어들기 시작합니다.")
 		elseif zone.State == "shrinking" then
 			local fraction = math.Clamp((now - zone.StateStart) / math.max(zone.StateEnd - zone.StateStart, 0.01), 0, 1)
 			zone.Center = LerpVector(fraction, zone.StartCenter, zone.TargetCenter)
@@ -727,7 +740,7 @@ function MODE:RoundThink()
 		end
 	end
 
-	local red = self.saved.RedZone
+	local red = self.EnableRedZones ~= false and self.saved.RedZone
 	if red then
 		if now >= red.EndTime then
 			self.saved.RedZone = nil
@@ -742,11 +755,11 @@ function MODE:RoundThink()
 				explosions = explosions + 1
 			end
 		end
-	elseif now >= (self.saved.NextRedZone or math.huge) then
+	elseif self.EnableRedZones ~= false and now >= (self.saved.NextRedZone or math.huge) then
 		StartRedZone(self)
 	end
 
-	if now >= (self.saved.NextAirdrop or math.huge) then
+	if self.EnableAirdrops ~= false and now >= (self.saved.NextAirdrop or math.huge) then
 		SpawnAirdrop(self)
 		self.saved.NextAirdrop = now + self.AirdropInterval
 	end
@@ -757,16 +770,18 @@ end
 function MODE:EndRound()
 	local winner = self.saved.Winner
 	if IsValid(winner) then
-		PrintMessage(HUD_PRINTTALK, "[배틀그라운드] " .. winner:GetPlayerName() .. "님이 최후의 생존자가 되었습니다.")
+		PrintMessage(HUD_PRINTTALK, "[" .. self:GetRoundPrintName() .. "] " .. winner:GetPlayerName() .. "님이 최후의 생존자가 되었습니다.")
 		winner:GiveExp(math.random(25, 40))
 		winner:GiveSkill(math.Rand(0.1, 0.18))
 	else
-		PrintMessage(HUD_PRINTTALK, "[배틀그라운드] 생존자 없이 전투가 종료되었습니다.")
+		PrintMessage(HUD_PRINTTALK, "[" .. self:GetRoundPrintName() .. "] " .. (self.NoWinnerMessage or "생존자 없이 전투가 종료되었습니다."))
 	end
 
 	RemoveTrackedAirdrops(self)
 	RemoveTrackedFieldLoot(self)
 	self.saved.RedZone = nil
+	self.saved.NextRedZone = nil
+	self.saved.NextAirdrop = nil
 	ClearGlobalState()
 end
 

@@ -155,10 +155,13 @@ function PLAYER:LegAttack()
 
                     PenetrationGlobal = 1
 					MaxPenLenGlobal = 1
-                    hg.AddForceRag(ent, tr.PhysicsBone or 0, normal * dmg * 1000, 0.25)
+                    local allowDamageEffects = hook.Run("HG_AllowDamageEffects", ent) ~= false
+                    if allowDamageEffects then
+                        hg.AddForceRag(ent, tr.PhysicsBone or 0, normal * dmg * 1000, 0.25)
+                    end
                     ent:TakeDamageInfo(dmginfo)
                     
-                    if IsValid(phys) then
+                    if IsValid(phys) and allowDamageEffects then
                         phys:ApplyForceOffset(normal * dmg * 200, tr.HitPos)
                     end
 
@@ -166,7 +169,7 @@ function PLAYER:LegAttack()
 						ent:EmitSound("physics/body/body_medium_impact_hard"..math.random(6)..".wav", 60, math.random(85, 105), 0.6)
                     end
 
-                    if ent:IsPlayer() then
+                    if ent:IsPlayer() and allowDamageEffects then
                         if math.random(1,5) > 1 then
                             timer.Simple(0,function()
                                 hg.Fake(ent)

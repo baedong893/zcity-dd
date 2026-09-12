@@ -544,6 +544,8 @@ function ENT:IG_EnableMotion(bool)
 				self:SetVelocity(data.vel)
 			end
 		end
+		-- Each freeze needs a fresh snapshot, especially ragdolls' per-bone data.
+		self.IG_motionEnabledData = nil
 		return
 	end
 	
@@ -660,8 +662,9 @@ function ENT:IG_EnableEffect(effect,data)
 	if data and !istable(data) then data = {} end
 	self.IG_effects[effect] = data
 	net.Start("IG_EnableEntityEffect")
+	-- Client reads this ID using MAX_EDICT_BITS, followed by enabled/name/data.
 	net.WriteEntity(self)
-	net.WriteBool(data)
+	net.WriteBool(data ~= nil and data ~= false)
 	net.WriteString(effect)
 	if data then
 		net.WriteTable(data or {})

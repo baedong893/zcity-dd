@@ -544,35 +544,53 @@ end
 
 local entityEffectsWaiting = {}
 net.Receive("IG_EnableEntityEffect",function()
-	local entID = net.ReadUInt(16)
-	if net.ReadBool() then
-		if Entity(entID):IsValid() then
-			Entity(entID):IG_EnableEffect(net.ReadString(),net.ReadTable())
+	-- Match net.WriteEntity while retaining the ID for entities not created locally yet.
+	local entID = net.ReadUInt(MAX_EDICT_BITS)
+	local enabled = net.ReadBool()
+	local effect = net.ReadString()
+	local ent = Entity(entID)
+	if enabled then
+		local effectData = net.ReadTable()
+		if ent:IsValid() then
+			ent:IG_EnableEffect(effect, effectData)
 		else
 			entityEffectsWaiting[entID] = entityEffectsWaiting[entID] or {}
-			entityEffectsWaiting[entID][#entityEffectsWaiting[entID]+1] = {net.ReadString(),net.ReadTable()}
+			entityEffectsWaiting[entID][effect] = effectData
 		end
 	else
-		entityEffectsWaiting[entID] = nil
-		local data = activeEffects[Entity(entID):IsValid() and Entity(entID) or entID]
-		if data then
-			data[net.ReadString()] = nil
+		local waiting = entityEffectsWaiting[entID]
+		if waiting then
+			waiting[effect] = nil
+			if next(waiting) == nil then entityEffectsWaiting[entID] = nil end
 		end
+		local data = activeEffects[ent]
+		if data then data[effect] = nil end
 	end
 end)
 
 hook.Add("OnEntityCreated","IG_EntityEffectWait",function(ent)
 	if entityEffectsWaiting[ent:EntIndex()] then
-		for k,v in pairs(entityEffectsWaiting[ent:EntIndex()]) do
-			ent:IG_EnableEffect(unpack(v))
+		for effect, data in pairs(entityEffectsWaiting[ent:EntIndex()]) do
+			ent:IG_EnableEffect(effect, data)
 		end
+		entityEffectsWaiting[ent:EntIndex()] = nil
 	end
 end)
 
 net.Receive("IG_ClearEntityEffect",function()
-	local entID = net.ReadUInt(16)
+	local entID = net.ReadUInt(MAX_EDICT_BITS)
 	entityEffectsWaiting[entID] = nil
-	activeEffects[Entity(entID):IsValid() and Entity(entID) or entID] = nil
+	activeEffects[Entity(entID)] = nil
+end)
+
+hook.Add("EntityRemoved", "IG_ClearEntityEffects", function(ent)
+	activeEffects[ent] = nil
+	entityEffectsWaiting[ent:EntIndex()] = nil
+end)
+
+hook.Add("PostCleanupMap", "IG_ClearEntityEffects", function()
+	table.Empty(activeEffects)
+	table.Empty(entityEffectsWaiting)
 end)
 
 hook.Add("PostDrawTranslucentRenderables","IG_DrawEntityEffects",function()
@@ -612,6 +630,14 @@ hook.Add("RenderScreenspaceEffects","IG_Effects",function()
 	if ply:IsValid() and ply:GetNWBool("IG_Invis") then
 		DrawColorModify(invisMod)
 	end
+end)
+
+hook.Add("PostDrawHUD", "IG_TimeStopOverlay", function()
+	if not GetGlobalBool("IG_TimeStopped", false) then return end
+	local color = IG_StoneData[IG_STONE_TIME].color
+	-- Draw after world post-processing so the tint fills the screen consistently.
+	surface.SetDrawColor(color.r, color.g, color.b, 90)
+	surface.DrawRect(0, 0, ScrW(), ScrH())
 end)
 
 local soulVisionMod = {
@@ -1347,12 +1373,14 @@ function SWEP:UpdateAppearence()
 	if !UsingOldModel() then
 		local minAlpha = 15
 		local vm = self.Owner:GetViewModel()
-		if !vm:IsValid() then return end
 		local glows = {}
 		for k,v in pairs(IG_StoneData) do
 			if k < 7 then
 				local hasStone = self:HasStone(k)
-				vm:SetBodygroup(k,hasStone and 0 or 1)
+				local bodygroup = hasStone and 0 or 1
+				if IsValid(vm) then vm:SetBodygroup(k,bodygroup) end
+				-- Remote players may not have a viewmodel, but their held model still updates.
+				self.WElements.gauntlet.bodygroup[k] = bodygroup
 				glows[v.element] = hasStone
 			end
 		end

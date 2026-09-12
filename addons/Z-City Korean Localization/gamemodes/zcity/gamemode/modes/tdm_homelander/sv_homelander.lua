@@ -250,7 +250,7 @@ function MODE:RoundStart()
 
 	timer.Create("HomelanderRelease", self.BuyTime or 40, 1, function()
 		local round = CurrentRound()
-		if round ~= self then return end
+		if round ~= self or zb.ROUND_STATE ~= 1 then return end
 		self:ReleaseHomelander()
 	end)
 end
@@ -448,6 +448,7 @@ function MODE:ShouldRoundEnd()
 end
 
 function MODE:EndRound()
+	timer.Remove("HomelanderRelease")
 	for _, ply in player.Iterator() do
 		ResetLaserArmorState(ply)
 		ply:SetNWBool(homelanderWaitingKey, false)

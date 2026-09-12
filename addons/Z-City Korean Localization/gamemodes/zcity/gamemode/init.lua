@@ -438,7 +438,8 @@ hg.addbot = hg.addbot or false
 function GM:PlayerInitialSpawn(ply)
 	ply.initialspawn = true
 
-	if #player.GetAll() == 1 then
+	local mode = CurrentRound and CurrentRound()
+	if #player.GetAll() == 1 and not (mode and mode.DisableAutoBot) then
 		RunConsoleCommand("bot")
 		hg.addbot = true
 		zb:EndRound()

@@ -59,6 +59,7 @@ local ExpTypes = {
 		local dis = rad / 0.01900
 		local entsCount = 0
 		for i, enta in ipairs(ents.FindInSphere(SelfPos, dis)) do
+			if hook.Run("HG_AllowDamageEffects", enta) == false then continue end
 			local tracePos = enta:IsPlayer() and (enta:GetPos() + enta:OBBCenter()) or enta:GetPos()
 			local tr = hg.ExplosionTrace(SelfPos, tracePos, {Ent})
 			local phys = enta:GetPhysicsObject()
@@ -166,6 +167,7 @@ local ExpTypes = {
 		local dis = rad / 0.01900
 		local entsCount = 0
 		for i, enta in ipairs(ents.FindInSphere(SelfPos, dis)) do
+			if hook.Run("HG_AllowDamageEffects", enta) == false then continue end
 			local tracePos = enta:IsPlayer() and (enta:GetPos() + enta:OBBCenter()) or enta:GetPos()
 			local tr = hg.ExplosionTrace(SelfPos, tracePos, {Ent})
 			local phys = enta:GetPhysicsObject()
@@ -273,6 +275,7 @@ local ExpTypes = {
 		local dis = rad / 0.01900
 		local entsCount = 0
 		for i, enta in ipairs(ents.FindInSphere(SelfPos, dis)) do
+			if hook.Run("HG_AllowDamageEffects", enta) == false then continue end
 			local tracePos = enta:IsPlayer() and (enta:GetPos() + enta:OBBCenter()) or enta:GetPos()
 			local tr = hg.ExplosionTrace(SelfPos, tracePos, {Ent})
 			local phys = enta:GetPhysicsObject()

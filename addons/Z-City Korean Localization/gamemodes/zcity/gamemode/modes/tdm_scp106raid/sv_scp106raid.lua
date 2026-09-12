@@ -8,7 +8,6 @@ local scpRoundKey = "ZC_SCP106Raid"
 local scpWaitingKey = scpRoundKey .. "_Waiting"
 local pocketDamageInterval = 1
 local pocketDamageAmount = 1
-local scpPhaseDescendSpeed = 260
 
 local function BroadcastT(key, fallback)
 	if ZCLang and ZCLang.Broadcast then
@@ -67,6 +66,8 @@ end
 
 local function CleanupSCP106Puddles()
 	for _, ply in player.Iterator() do
+		local weapon = ply:GetWeapon("swep_106_pd")
+		if IsValid(weapon) and weapon.ResetSCP106State then weapon:ResetSCP106State() end
 		timer.Remove(ply:SteamID() .. "_S106Teleport")
 
 		if IsValid(ply.S106_GatePuddle) then
@@ -124,18 +125,8 @@ local function ResetSpawnCache()
 end
 
 local function IsSCP106(ply, round)
-	return IsValid(ply) and round and ply == round.saved.SCP106
-end
-
-local function IsSCP106PhaseMoving(ply)
-	if not IsValid(ply) then return false end
-
-	local weapon = ply:GetActiveWeapon()
-	if not IsValid(weapon) or weapon:GetClass() ~= "swep_106_pd" then return false end
-	if not ply:KeyDown(IN_RELOAD) or not ply:KeyDown(IN_FORWARD) then return false end
-	if ply:EyeAngles():Forward().z > -0.35 then return false end
-
-	return ply:GetNotSolid() or ply:GetMoveType() == MOVETYPE_NOCLIP
+	return IsValid(ply) and ply:IsPlayer() and round and round.saved and ply == round.saved.SCP106
+		and ply:GetNWString(scpRoundKey .. "_Role", "") == "scp"
 end
 
 local function IsMTF(ply, round)
@@ -149,27 +140,6 @@ local function IsInSCP106PocketDimension(ply)
 
 	local dream = ply:GetDream()
 	return istable(dream) and dream.Name == "scp106"
-end
-
-local function ApplySCP106Impact(ply, dmg)
-	if not IsValid(ply) or not dmg then return end
-
-	local dir = dmg:GetDamageForce()
-	if dir:LengthSqr() <= 0 then
-		local attacker = dmg:GetAttacker()
-		if IsValid(attacker) then
-			dir = ply:WorldSpaceCenter() - attacker:WorldSpaceCenter()
-		else
-			dir = ply:GetForward()
-		end
-	end
-
-	dir.z = math.Clamp(dir.z, -0.15, 0.2)
-	if dir:LengthSqr() <= 0 then return end
-	dir:Normalize()
-
-	dmg:SetDamageForce(vector_origin)
-	ply:SetVelocity(dir * 110)
 end
 
 function MODE.GuiltCheck(attacker, victim)
@@ -341,7 +311,7 @@ function MODE:ReleaseSCP106()
 	BroadcastT("sv_scp_escaped", "SCP-106이 격리실을 벗어났습니다!")
 end
 
-function MODE:ApplyMTF(ply, wave)
+function MODE:ApplyMTF(ply, wave, giveSpecialWeapon)
 	if not IsValid(ply) then return end
 
 	local isOmega = wave == 2
@@ -370,6 +340,7 @@ function MODE:ApplyMTF(ply, wave)
 	ply:SetMaxHealth(isOmega and 125 or 100)
 	ply:SetHealth(ply:GetMaxHealth())
 	GiveCommonMTFItems(ply)
+	if giveSpecialWeapon and self.MTFSpecialWeapon then ply:Give(self.MTFSpecialWeapon) end
 
 	local weapon = ply:Give(weaponClass)
 	if IsValid(weapon) then
@@ -390,14 +361,16 @@ function MODE:SpawnMTFWave(wave)
 	self.saved.NextSupportTime = nil
 	ResetSpawnCache()
 
-	local scp = self.saved.SCP106
-	local spawned = 0
+	local mtf = {}
 
 	for _, ply in player.Iterator() do
-		if ply == scp then continue end
-		if ply:Team() == TEAM_SPECTATOR then continue end
-		self:ApplyMTF(ply, wave)
-		spawned = spawned + 1
+		if IsMTF(ply, self) then mtf[#mtf + 1] = ply end
+	end
+
+	-- Select once per deployment, including the initial team and reinforcements.
+	local specialWeaponRecipient = #mtf > 0 and table.Random(mtf) or nil
+	for _, ply in ipairs(mtf) do
+		self:ApplyMTF(ply, wave, ply == specialWeaponRecipient)
 	end
 
 	if wave == 1 then
@@ -406,7 +379,7 @@ function MODE:SpawnMTFWave(wave)
 		BroadcastT("sv_scp_omega", "마지막 지원, 오메가 기동특무부대가 투입되었습니다!")
 	end
 
-	return spawned
+	return #mtf
 end
 
 function MODE:GiveEquipment()
@@ -424,11 +397,7 @@ function MODE:GiveEquipment()
 
 		self:ApplySCP106(scp)
 
-		for _, ply in player.Iterator() do
-			if ply == scp then continue end
-			if ply:Team() == TEAM_SPECTATOR then continue end
-			self:ApplyMTF(ply, 0)
-		end
+		self:SpawnMTFWave(0)
 
 		BroadcastT("sv_scp_started", "SCP-106 격리 작전이 시작되었습니다.")
 
@@ -457,14 +426,10 @@ function MODE:RoundThink()
 	if self.saved.Winner then return end
 	local scp = self.saved.SCP106
 	if IsValid(scp) and scp:Alive() then
-		self:ResetSCPOrganismDamage(scp)
-
 		if scp:GetNWBool(scpWaitingKey, false) then
 			scp:SetVelocity(-scp:GetVelocity())
 			scp:Freeze(true)
 			scp:SetMoveType(MOVETYPE_NONE)
-		elseif hg and hg.FakeUp and IsValid(scp.FakeRagdoll) then
-			hg.FakeUp(scp, true, true)
 		end
 	end
 
@@ -569,18 +534,37 @@ function MODE:EntityTakeDamage(ent, dmg)
 	end
 
 	if IsSCP106(ent, self) then
-		ApplySCP106Impact(ent, dmg)
-		self:ResetSCPOrganismDamage(ent)
-		timer.Simple(0, function()
-			if CurrentRound() == self and IsValid(ent) then
-				if IsValid(ent.FakeRagdoll) and hg and hg.FakeUp then
-					hg.FakeUp(ent, true, true)
-				end
-
-				self:ResetSCPOrganismDamage(ent)
-			end
-		end)
+		-- Consume the per-hit trace overrides normally consumed by homigrad-damage.
+		PenetrationGlobal = nil
+		MaxPenLenGlobal = nil
+		-- Keep the pocket dimension's isolation rules before bypassing damage hooks.
+		if ent.IsDreaming and ent:IsDreaming() then
+			local dream = ent:GetDream()
+			if dream and dream:EntityTakeDamage(ent, attacker, dmg:GetInflictor(), dmg) then return true end
+		end
+		dmg:SetDamageForce(vector_origin)
+		dmg:SetDamageType(DMG_GENERIC + DMG_PREVENT_PHYSICS_FORCE)
+		-- The mode dispatcher stops on false too: skip organism damage hooks,
+		-- but let Source apply HP damage and retain normal attacker/death handling.
+		return false
 	end
+end
+
+function MODE:ScalePlayerDamage(ply, hitgroup, dmg)
+	if IsSCP106(ply, self) then return false end
+end
+
+function MODE:PostEntityTakeDamage(ent, dmg)
+	if IsSCP106(ent, self) then return true end
+end
+
+function MODE:HG_AllowDamageEffects(ent)
+	if IsSCP106(ent, self) then return false end
+end
+
+-- SCP-106 has an HP pool instead of human physiological damage and recovery.
+MODE["Org Think"] = function(self, owner, org)
+	if IsSCP106(owner, self) then return true end
 end
 
 function MODE:SetupMove(ply, mv)
@@ -594,8 +578,4 @@ function MODE:SetupMove(ply, mv)
 		return
 	end
 
-	if IsSCP106PhaseMoving(ply) then
-		mv:SetUpSpeed(-scpPhaseDescendSpeed)
-		mv:SetVelocity(mv:GetVelocity() + Vector(0, 0, -scpPhaseDescendSpeed))
-	end
 end

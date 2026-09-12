@@ -168,6 +168,7 @@ if SERVER then
 		local disorientation_dis = (self.BlastDis * 1.5) / 0.01905  
 
 		for i, enta in ipairs(ents.FindInSphere(SelfPos, disorientation_dis)) do
+			if hook.Run("HG_AllowDamageEffects", enta) == false then continue end
 			local tracePos = enta:IsPlayer() and (enta:GetPos() + enta:OBBCenter()) or enta:GetPos()
 			local tr = hg.ExplosionTrace(SelfPos, tracePos, {self})
 			local phys = enta:GetPhysicsObject()

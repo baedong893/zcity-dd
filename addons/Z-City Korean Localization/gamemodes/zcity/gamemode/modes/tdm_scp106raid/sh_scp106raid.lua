@@ -26,6 +26,7 @@ else
 end
 
 MODE.SCPWeapon = "swep_106_pd"
+MODE.MTFSpecialWeapon = "weapon_scp106_flash"
 MODE.MTFModel = "models/Kuge/Generic/SCP MTF ETA5/mtf-eta5_exp-pm.mdl"
 MODE.AlphaModel = MODE.MTFModel
 MODE.AlphaWeapon = "weapon_hk416"

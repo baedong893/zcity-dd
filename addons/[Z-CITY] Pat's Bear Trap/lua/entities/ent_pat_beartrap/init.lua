@@ -266,7 +266,9 @@ end
 function ENT:Use(act)
     if not IsValid(act) or not act:IsPlayer() then return end
     if act:HasWeapon("weapon_beartrap_homigrad") then return end
+    if hook.Run("HG_CanRecoverPlacedWeapon", act, "weapon_beartrap_homigrad", self) == false then return end
 
-    act:Give("weapon_beartrap_homigrad")
+    local weapon = act:Give("weapon_beartrap_homigrad")
+    if not IsValid(weapon) then return end
     self:Remove()
 end

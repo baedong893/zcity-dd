@@ -104,12 +104,12 @@ function MODE:HUDPaint()
 	local phaseEnd = GetGlobalFloat(GLOBAL_PREFIX .. "PhaseEnd", 0)
 	local shrinking = GetGlobalBool(GLOBAL_PREFIX .. "Shrinking", false)
 	local timeLeft = math.max(phaseEnd - CurTime(), 0)
-	local finalZone = phase > #(MODE.ZonePhases or {})
+	local finalZone = phase > #(self.ZonePhases or {})
 	local stateText = finalZone and "최종 자기장" or (shrinking and "자기장 축소" or "다음 자기장")
 
-	draw.SimpleText("배틀그라운드", "ZC_BG_Title", sw * 0.5, sh * 0.045, Color(235, 185, 55), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+	draw.SimpleText(self.PrintName, "ZC_BG_Title", sw * 0.5, sh * 0.045, Color(235, 185, 55), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 	local timingText = finalZone and stateText or stateText .. " " .. string.FormattedTime(timeLeft, "%02i:%02i")
-	draw.SimpleText("생존 " .. AliveCount() .. "명  |  " .. math.min(phase, #(MODE.ZonePhases or {})) .. "단계  |  " .. timingText, "ZC_BG_Info", sw * 0.5, sh * 0.078, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+	draw.SimpleText("생존 " .. AliveCount() .. "명  |  " .. math.min(phase, #(self.ZonePhases or {})) .. "단계  |  " .. timingText, "ZC_BG_Info", sw * 0.5, sh * 0.078, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 
 	if ply:Alive() and radius > 0 then
 		local distance = HorizontalDistance(ply:GetPos(), center)

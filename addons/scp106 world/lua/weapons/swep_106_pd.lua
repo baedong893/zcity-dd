@@ -1,11 +1,11 @@
 AddCSLuaFile()
 
 SWEP.PrintName = "SCP-106 (Dreams)"
-SWEP.Category = "Dreams - SCP"
+SWEP.Category = "Z 시티 SCP 모드"
 SWEP.Spawnable = true
 SWEP.AdminOnly = true
 SWEP.Author = "eskill / reworked v10 swep only"
-SWEP.Purpose = "Left - Attack\nRight - Select ability\nR - Use selected ability / hold Phase"
+SWEP.Purpose = "Left - Use selected ability / hold Phase\nRight - Attack\nQ - Select ability"
 SWEP.DisableDuplicator = true
 
 SWEP.Primary.ClipSize = -1
@@ -25,7 +25,7 @@ SWEP.UseHands = false
 local ABILITIES = {
 	{ id = "pocket", name = "Pocket Dimension", desc = "가까운 대상을 포켓 디멘션으로 끌고 갑니다." },
 	{ id = "selfpd", name = "Enter / Exit PD", desc = "자기 자신이 포켓 디멘션에 들어가거나 나옵니다." },
-	{ id = "phase", name = "Phase", desc = "R키를 누르고 있는 동안 벽/바닥 속으로 스며듭니다." },
+	{ id = "phase", name = "Phase", desc = "마우스 왼쪽 버튼을 누르고 있는 동안 벽/바닥 속으로 스며듭니다." },
 	{ id = "mark", name = "Mark Gate", desc = "바닥에 이동 표식을 설치합니다." },
 	{ id = "teleport", name = "Teleport Gate", desc = "설치한 표식 위치로 이동합니다." },
 }
@@ -52,6 +52,7 @@ local TELEPORT_SINK_DEPTH = 70
 local MARK_COOLDOWN = 1.5
 local POCKET_COOLDOWN = 2
 local SELF_PD_COOLDOWN = 5
+local FLASH_SPEED_MULTIPLIER = 0.75
 
 local PUDDLE_MARK_SMALL = 115
 local PUDDLE_MARK_MEDIUM = 210
@@ -141,17 +142,101 @@ local function RemoveJumpInput(mv, cmd)
 end
 
 
-local function GetAbilityIndex(ply)
-	if not IsValid(ply) then return 1 end
-	ply.S106_SelectedAbility = ply.S106_SelectedAbility or 1
-	if not ABILITIES[ply.S106_SelectedAbility] then
-		ply.S106_SelectedAbility = 1
+local abilitySelectionNet = "SCP106_SelectAbility"
+
+function SWEP:IsFlashDisabled()
+	return self:GetNWFloat("S106_DisabledUntil", 0) > CurTime()
+end
+
+function SWEP:GetSelectedAbility()
+	local selectedId = self:GetNWString("S106_SelectedAbility", ABILITIES[1].id)
+	for _, ability in ipairs(ABILITIES) do
+		if ability.id == selectedId then return ability end
 	end
-	return ply.S106_SelectedAbility
+	return ABILITIES[1]
 end
 
 local function GetAbility(ply)
-	return ABILITIES[GetAbilityIndex(ply)]
+	local weapon = IsValid(ply) and ply:GetWeapon("swep_106_pd")
+	return IsValid(weapon) and weapon:GetSelectedAbility() or ABILITIES[1]
+end
+
+local function CanSelectAbility(ply, weapon)
+	return IsValid(ply) and ply:IsPlayer() and ply:Alive()
+		and IsValid(weapon) and weapon:GetClass() == "swep_106_pd"
+		and weapon:GetOwner() == ply and ply:GetActiveWeapon() == weapon
+		and not weapon:IsFlashDisabled()
+		and (not zb or zb.ROUND_STATE == 1)
+		and not (ply.organism and ply.organism.otrub)
+end
+
+if SERVER then
+	util.AddNetworkString(abilitySelectionNet)
+	net.Receive(abilitySelectionNet, function(_, ply)
+		local weapon = net.ReadEntity()
+		local abilityId = net.ReadString()
+		if not CanSelectAbility(ply, weapon) then return end
+		if (weapon.S106_NextAbilitySelection or 0) > CurTime() then return end
+		weapon.S106_NextAbilitySelection = CurTime() + 0.15
+
+		-- Keep Phase selected until the player has safely left the wall.
+		if ply.S106_PhaseActive then
+			ServerChat(ply, "[SCP-106] 벽 밖으로 나온 뒤 능력을 선택하세요.")
+			return
+		end
+
+		for _, ability in ipairs(ABILITIES) do
+			if ability.id == abilityId then
+				weapon:SetNWString("S106_SelectedAbility", ability.id)
+				ServerChat(ply, "[SCP-106] 능력 선택: " .. ability.name .. " / 좌클릭: 사용")
+				ply:EmitSound("buttons/button15.wav")
+				return
+			end
+		end
+	end)
+end
+
+if CLIENT then
+	local normalColor = Color(85, 35, 105, 190)
+	local selectedColor = Color(165, 75, 200, 220)
+
+	-- Use the same Q radial-menu extension as Vietnam's team abilities.
+	hook.Add("HG_GetRadialMenuOverride", "SCP106_AbilitySelection", function(ply)
+		local weapon = IsValid(ply) and ply:GetActiveWeapon()
+		if not CanSelectAbility(ply, weapon) then return end
+
+		local options = {}
+		for _, ability in ipairs(ABILITIES) do
+			local selected = weapon:GetSelectedAbility().id == ability.id
+			options[#options + 1] = {
+				function()
+					if not CanSelectAbility(ply, weapon) then return end
+					net.Start(abilitySelectionNet)
+						net.WriteEntity(weapon)
+						net.WriteString(ability.id)
+					net.SendToServer()
+				end,
+				ability.name .. (selected and " [선택됨]" or "") .. "\n" .. ability.desc .. "\n선택 후 좌클릭으로 사용",
+				nil, nil, nil,
+				selected and selectedColor or normalColor,
+				selectedColor
+			}
+		end
+		options.S106Weapon = weapon
+		return options
+	end)
+
+	hook.Add("Think", "SCP106_CloseAbilityMenu", function()
+		local options = hg and hg.radialOptions
+		if not options or not options.S106Weapon then return end
+		if not IsValid(MENUPANELHUYHUY) then
+			options.S106Weapon = nil
+			return
+		end
+		if CanSelectAbility(LocalPlayer(), options.S106Weapon) then return end
+		MENUPANELHUYHUY:Remove()
+		table.Empty(options)
+	end)
 end
 
 local function PlayerIsInsideWorld(ply)
@@ -204,10 +289,11 @@ local function TryEnterPhaseSurface(ply, mv)
 	-- 아래를 보고 W를 누르면 바닥 속으로 스며든다.
 	if aim.z < -0.18 then
 		traces[#traces + 1] = {
-			dir = aim:GetNormalized(),
+			dir = Vector(0, 0, -1),
 			tr = util.TraceLine({
-				start = ply:EyePos(),
-				endpos = ply:EyePos() + aim:GetNormalized() * PHASE_ENTER_TRACE_DIST,
+				-- Trace from the feet: a 54-unit eye trace cannot reach a standing player's floor.
+				start = mv:GetOrigin() + Vector(0, 0, 8),
+				endpos = mv:GetOrigin() - Vector(0, 0, PHASE_ENTER_TRACE_DIST),
 				filter = ply,
 				mask = MASK_SOLID_BRUSHONLY
 			})
@@ -235,7 +321,9 @@ local function TryEnterPhaseSurface(ply, mv)
 			PlaceTraceDecal(tr)
 			ply.S106_LastSafePos = ply:GetPos()
 			ply:SetMoveType(MOVETYPE_NOCLIP)
-			ply:SetPos(ply:GetPos() + dir * PHASE_ENTER_PUSH_DIST)
+			-- FinishMove commits CMoveData's origin; SetPos alone is overwritten this tick.
+			mv:SetOrigin(mv:GetOrigin() + dir * PHASE_ENTER_PUSH_DIST)
+			ply:SetGroundEntity(NULL)
 			ply:SetAbsVelocity(vector_origin)
 			ply:SetVelocity(vector_origin)
 			-- 진입 직후 TraceHull이 아직 solid로 안 잡히는 틱이 있어도
@@ -427,8 +515,8 @@ local function EndPhase(ply, force)
 
 	local insideWorld = PlayerIsInsideWorld(ply)
 
-	-- R키를 뗐는데 아직 벽/바닥 안이면 밖으로 튕겨내지 않는다.
-	-- 그 자리에서 정지하고, R키를 다시 누르면 이어서 움직인다.
+	-- 마우스 왼쪽 버튼을 뗐는데 아직 벽/바닥 안이면 밖으로 튕겨내지 않는다.
+	-- 그 자리에서 정지하고, 마우스 왼쪽 버튼을 다시 누르면 이어서 움직인다.
 	if insideWorld and not force then
 		ply.S106_PhasePaused = true
 		ply:SetMoveType(MOVETYPE_NOCLIP)
@@ -437,6 +525,10 @@ local function EndPhase(ply, force)
 		return
 	end
 
+	-- Forced interruptions must not restore WALK while the player is inside solid geometry.
+	if insideWorld and force and ply.S106_LastSafePos then
+		ply:SetPos(ply.S106_LastSafePos)
+	end
 	PlaceNearestSurfaceDecal(ply)
 
 	ply.S106_PhaseActive = false
@@ -452,14 +544,51 @@ local function EndPhase(ply, force)
 	ply:SetVelocity(vector_origin)
 end
 
+function SWEP:CancelActiveAbilities(owner)
+	if not SERVER then return end
+	owner = owner or self:GetOwner()
+	if self.S106_CancelPDEntry then self.S106_CancelPDEntry() end
+	if not IsValid(owner) then return end
+	EndPhase(owner, true)
+	owner.S106_PhaseExitLock = nil
+	if self.S106_TeleportReturnPos then
+		timer.Remove(owner:SteamID() .. "_S106Teleport")
+		owner:SetPos(self.S106_TeleportReturnPos)
+		owner:SetMoveType(MOVETYPE_WALK)
+		owner:Freeze(false)
+		owner:SetAbsVelocity(vector_origin)
+		self.S106_TeleportReturnPos = nil
+	end
+end
+
+function SWEP:ResetSCP106State(owner)
+	if not SERVER then return end
+	self:CancelActiveAbilities(owner)
+	self:SetNWFloat("S106_DisabledUntil", 0)
+	self:SetNWFloat("S106_BlindUntil", 0)
+end
+
+function SWEP:ApplyFlashDisable(duration, blindDuration)
+	if not SERVER then return false end
+	local owner = self:GetOwner()
+	if not IsValid(owner) or not owner:Alive() then return false end
+	self:CancelActiveAbilities()
+	blindDuration = blindDuration or duration
+	local now = CurTime()
+	self:SetNWFloat("S106_DisabledUntil", now + duration)
+	self:SetNWFloat("S106_BlindUntil", now + blindDuration)
+	ServerChat(owner, string.format("[SCP-106] 섬광으로 %g초간 시야가 차단됩니다. %g초간 이동속도가 25%% 감소하고 능력과 무기가 차단됩니다.", blindDuration, duration))
+	return true
+end
+
 function SWEP:Deploy()
 	self:SetHoldType("normal")
 
 	if SERVER then
 		local owner = self:GetOwner()
 		if IsValid(owner) then
-			GetAbilityIndex(owner)
-			ServerChat(owner, "[SCP-106] 좌클릭: 공격 / 우클릭: 능력 선택 / R: 선택 능력 사용")
+			owner.S106_SelectedAbility = nil -- Retire the old player-local selection.
+			ServerChat(owner, "[SCP-106] Q 메뉴: 능력 선택 / 좌클릭: 선택 능력 사용 / 우클릭: 공격")
 			ServerChat(owner, "[SCP-106] 현재 능력: " .. GetAbility(owner).name)
 		end
 	end
@@ -471,19 +600,23 @@ function SWEP:Holster()
 	if SERVER then
 		local owner = self:GetOwner()
 		if IsValid(owner) and owner.S106_PhaseActive and PlayerIsInsideWorld(owner) then
-			ServerChat(owner, "[SCP-106] 벽 안에서는 무기를 바꿀 수 없습니다. R키로 먼저 밖으로 나오세요.")
+			ServerChat(owner, "[SCP-106] 벽 안에서는 무기를 바꿀 수 없습니다. 좌클릭으로 먼저 밖으로 나오세요.")
 			return false
 		end
 
-		EndPhase(owner, true)
+		self:CancelActiveAbilities()
 	end
 	return true
 end
 
 function SWEP:OnRemove()
 	if SERVER then
-		EndPhase(self:GetOwner())
+		self:ResetSCP106State()
 	end
+end
+
+function SWEP:OnDrop()
+	self:ResetSCP106State()
 end
 
 function SWEP:Initialize()
@@ -497,13 +630,13 @@ function SWEP:ShouldDrawViewModel()
 	return false
 end
 
-function SWEP:PrimaryAttack()
-	if CLIENT then return end
+function SWEP:SecondaryAttack()
+	if CLIENT or self:IsFlashDisabled() then return end
 
 	local owner = self:GetOwner()
 	if not IsValid(owner) then return end
 
-	self:SetNextPrimaryFire(CurTime() + 0.85)
+	self:SetNextSecondaryFire(CurTime() + 0.85)
 
 	if owner:IsDreaming() then
 		if owner.DreamRoom and not owner.DreamRoom.notvalid and owner.GetDream and owner:GetDream() then
@@ -535,26 +668,8 @@ function SWEP:PrimaryAttack()
 	owner:EmitSound("npc/zombie/claw_strike" .. math.random(1, 3) .. ".wav")
 end
 
-function SWEP:SecondaryAttack()
-	if CLIENT then return end
-
-	local owner = self:GetOwner()
-	if not IsValid(owner) then return end
-
-	self:SetNextSecondaryFire(CurTime() + 0.3)
-
-	owner.S106_SelectedAbility = GetAbilityIndex(owner) + 1
-	if owner.S106_SelectedAbility > #ABILITIES then
-		owner.S106_SelectedAbility = 1
-	end
-
-	local ability = GetAbility(owner)
-	ServerChat(owner, "[SCP-106] 능력 선택: " .. ability.name .. " - " .. ability.desc)
-	owner:EmitSound("buttons/button15.wav")
-end
-
-function SWEP:Reload()
-	if CLIENT then return end
+function SWEP:PrimaryAttack()
+	if CLIENT or self:IsFlashDisabled() then return end
 
 	local owner = self:GetOwner()
 	if not IsValid(owner) then return end
@@ -574,27 +689,41 @@ function SWEP:Reload()
 	end
 end
 
+function SWEP:Reload()
+	-- Abilities use primary fire; reload has no action.
+end
+
 function SWEP:Think()
 	if CLIENT then return end
 
 	local owner = self:GetOwner()
 	if not IsValid(owner) then return end
 
-	-- 벽 밖으로 나온 뒤 R을 계속 누르고 있으면 다시 Phase가 시작되는 것을 막는다.
-	-- R을 한 번 떼면 다음 Phase 사용 가능.
-	if owner.S106_PhaseExitLock and not owner:KeyDown(IN_RELOAD) then
+	local blindUntil = self:GetNWFloat("S106_BlindUntil", 0)
+	if blindUntil ~= 0 and blindUntil <= CurTime() then
+		self:SetNWFloat("S106_BlindUntil", 0)
+	end
+	if self:IsFlashDisabled() then return end
+	if self:GetNWFloat("S106_DisabledUntil", 0) ~= 0 then
+		self:SetNWFloat("S106_DisabledUntil", 0)
+	end
+
+	-- 벽 밖으로 나온 뒤 마우스 왼쪽 버튼을 계속 누르고 있으면 다시 Phase가 시작되는 것을 막는다.
+	-- 마우스 왼쪽 버튼을 한 번 떼면 다음 Phase 사용 가능.
+	if owner.S106_PhaseExitLock and not owner:KeyDown(IN_ATTACK) then
 		owner.S106_PhaseExitLock = nil
 	end
 
-	if owner.S106_PhaseActive and not owner:KeyDown(IN_RELOAD) then
+	if owner.S106_PhaseActive and not owner:KeyDown(IN_ATTACK) then
 		EndPhase(owner, false)
-	elseif owner.S106_PhaseActive and owner:KeyDown(IN_RELOAD) and owner.S106_PhasePaused then
+	elseif owner.S106_PhaseActive and owner:KeyDown(IN_ATTACK) and owner.S106_PhasePaused then
 		owner.S106_PhasePaused = nil
 		owner:SetMoveType(MOVETYPE_NOCLIP)
 	end
 end
 
 function SWEP:UsePocket(owner)
+	if self:IsFlashDisabled() then return end
 	if not IsValid(owner) or owner:IsDreaming() then return end
 	if self.NextPocket and self.NextPocket > CurTime() then return end
 	self.NextPocket = CurTime() + POCKET_COOLDOWN
@@ -622,6 +751,7 @@ function SWEP:UsePocket(owner)
 end
 
 function SWEP:UseSelfPD(owner)
+	if self:IsFlashDisabled() then return end
 	if not IsValid(owner) then return end
 	if self.NextSelfPD and self.NextSelfPD > CurTime() then return end
 	self.NextSelfPD = CurTime() + SELF_PD_COOLDOWN
@@ -641,20 +771,21 @@ function SWEP:UseSelfPD(owner)
 		return
 	end
 
-	pd106.PutInPD(owner)
+	pd106.PutInPD(owner, nil, self)
 end
 
 function SWEP:StartPhase(owner)
+	if self:IsFlashDisabled() then return end
 	if not IsValid(owner) or owner:IsDreaming() then return end
 
-	-- 밖으로 나온 직후 R을 계속 누르고 있는 동안에는 재진입 금지.
+	-- 밖으로 나온 직후 마우스 왼쪽 버튼을 계속 누르고 있는 동안에는 재진입 금지.
 	if owner.S106_PhaseExitLock then return end
 
 	if owner.S106_PhaseActive then
 		owner.S106_PhasePaused = nil
 
 		-- 이미 벽/바닥 안에 있거나 NOCLIP Phase 상태일 때만 재개한다.
-		-- 밖에 서 있는 상태에서 R키가 반복 호출되면 여기서 NOCLIP으로 바꾸지 않는다.
+		-- 밖에 서 있는 상태에서 마우스 왼쪽 버튼이 반복 호출되면 여기서 NOCLIP으로 바꾸지 않는다.
 		if PlayerIsInsideWorld(owner) or owner:GetMoveType() == MOVETYPE_NOCLIP then
 			owner:SetMoveType(MOVETYPE_NOCLIP)
 			owner:SetAbsVelocity(vector_origin)
@@ -686,11 +817,12 @@ function SWEP:StartPhase(owner)
 	else
 		owner:SetMoveType(MOVETYPE_WALK)
 		-- 밖에 있을 때는 현재 WALK 이동 속도를 죽이지 않는다.
-		-- 여기서 속도를 0으로 만들면 R키를 누른 순간 앞으로 가려 해도 고정된다.
+		-- 여기서 속도를 0으로 만들면 마우스 왼쪽 버튼을 누른 순간 앞으로 가려 해도 고정된다.
 	end
 end
 
 function SWEP:UseMark(owner)
+	if self:IsFlashDisabled() then return end
 	if not IsValid(owner) or owner:IsDreaming() then return end
 	if self.NextMark and self.NextMark > CurTime() then return end
 	self.NextMark = CurTime() + MARK_COOLDOWN
@@ -718,6 +850,7 @@ function SWEP:UseMark(owner)
 end
 
 function SWEP:UseTeleport(owner)
+	if self:IsFlashDisabled() then return end
 	if not IsValid(owner) or owner:IsDreaming() then return end
 	if self.NextTeleport and self.NextTeleport > CurTime() then return end
 	if timer.Exists(owner:SteamID() .. "_S106Teleport") then return end
@@ -735,6 +868,7 @@ function SWEP:UseTeleport(owner)
 	end
 
 	local startPos = owner:GetPos()
+	self.S106_TeleportReturnPos = startPos
 	local startTime = CurTime()
 	local timerName = owner:SteamID() .. "_S106Teleport"
 	local switchedToExit = false
@@ -752,9 +886,15 @@ function SWEP:UseTeleport(owner)
 			return
 		end
 
-		if not owner:Alive() then
+		if not IsValid(self) then
+			owner:SetPos(startPos)
+			owner:SetMoveType(MOVETYPE_WALK)
 			owner:Freeze(false)
 			timer.Remove(timerName)
+			return
+		end
+		if not owner:Alive() or self:IsFlashDisabled() or owner:GetActiveWeapon() ~= self then
+			self:CancelActiveAbilities()
 			return
 		end
 
@@ -772,6 +912,7 @@ function SWEP:UseTeleport(owner)
 
 		if not switchedToExit then
 			switchedToExit = true
+			self.S106_TeleportReturnPos = safePos
 			PlaceNearestSurfaceDecal(owner)
 			owner:SetPos(safePos - Vector(0, 0, TELEPORT_SINK_DEPTH))
 			owner:EmitSound("scp106pd/laugh.wav")
@@ -784,6 +925,7 @@ function SWEP:UseTeleport(owner)
 			return
 		end
 
+		self.S106_TeleportReturnPos = nil
 		owner:SetPos(safePos)
 		owner:SetMoveType(MOVETYPE_WALK)
 		owner:Freeze(false)
@@ -814,7 +956,7 @@ hook.Add("SetupMove", "SCP106_Rebuilt_PhaseMove", function(ply, mv, cmd)
 
 	local insideWorld = PlayerIsInsideWorld(ply)
 
-	if ply.S106_PhasePaused or not mv:KeyDown(IN_RELOAD) then
+	if ply.S106_PhasePaused or not mv:KeyDown(IN_ATTACK) then
 		mv:SetVelocity(vector_origin)
 		mv:SetMaxClientSpeed(1)
 		mv:SetMaxSpeed(1)
@@ -825,7 +967,7 @@ hook.Add("SetupMove", "SCP106_Rebuilt_PhaseMove", function(ply, mv, cmd)
 	-- 표면을 향해 실제로 스며들 때만 노클립으로 바꾸고, 그 전에는 일반 이동 상태를 유지한다.
 	if not insideWorld and ply:GetMoveType() ~= MOVETYPE_NOCLIP then
 		-- 아직 표면 안에 들어가지 않은 상태에서는 일반 WALK 이동을 살려둔다.
-		-- 여기서 입력축을 0으로 만들면 R을 누른 순간 바닥에 고정되는 문제가 생긴다.
+		-- 여기서 입력축을 0으로 만들면 마우스 왼쪽 버튼을 누른 순간 바닥에 고정되는 문제가 생긴다.
 		ply:SetMoveType(MOVETYPE_WALK)
 		if TryEnterPhaseSurface(ply, mv) then
 			insideWorld = true
@@ -904,7 +1046,7 @@ hook.Add("SetupMove", "SCP106_Rebuilt_PhaseMove", function(ply, mv, cmd)
 		PlaceNearestSurfaceDecal(ply)
 	elseif not insideWorld and ply.S106_PhaseWasInside then
 		-- 벽/바닥 밖으로 나온 순간 즉시 Phase를 종료한다.
-		-- R을 계속 누르고 있어도 더 이상 노클립 상태로 움직이지 않는다.
+		-- 마우스 왼쪽 버튼을 계속 누르고 있어도 더 이상 노클립 상태로 움직이지 않는다.
 		PlaceNearestSurfaceDecal(ply)
 		ply.S106_PhaseExitLock = true
 		EndPhase(ply, true)
@@ -917,7 +1059,7 @@ hook.Add("SetupMove", "SCP106_Rebuilt_PhaseMove", function(ply, mv, cmd)
 	ply.S106_PhaseWasInside = insideWorld
 
 	-- 정지 중에는 흔적을 계속 만들지 않는다.
-	-- R을 처음 누를 때 한 번, 벽/바닥 입출입 때 한 번, 실제로 움직인 거리마다 한 번만 생성한다.
+	-- 마우스 왼쪽 버튼을 처음 누를 때 한 번, 벽/바닥 입출입 때 한 번, 실제로 움직인 거리마다 한 번만 생성한다.
 	if moveDir:LengthSqr() > 0 and CurTime() >= (ply.S106_NextPhaseDecal or 0) then
 		local lastDecalPos = ply.S106_LastPhaseDecalPos
 		local movedEnough = not lastDecalPos or ply:GetPos():DistToSqr(lastDecalPos) >= PHASE_DECAL_MOVE_DIST * PHASE_DECAL_MOVE_DIST
@@ -930,22 +1072,75 @@ hook.Add("SetupMove", "SCP106_Rebuilt_PhaseMove", function(ply, mv, cmd)
 	end
 end)
 
-hook.Add("PlayerDeath", "SCP106_Rebuilt_EndPhaseDeath", function(ply)
-	EndPhase(ply, true)
-end)
-
-hook.Add("PlayerDisconnected", "SCP106_Rebuilt_EndPhaseDisconnect", function(ply)
-	EndPhase(ply, true)
-end)
-
 hook.Add("PlayerSwitchWeapon", "SCP106_Rebuilt_EndPhaseSwitch", function(ply, oldWep, newWep)
-	if not IsValid(ply) or not ply.S106_PhaseActive then return end
+	if not IsValid(ply) then return end
+	local weapon = ply:GetWeapon("swep_106_pd")
+	if IsValid(weapon) and weapon:IsFlashDisabled() then return true end
+	if not ply.S106_PhaseActive then return end
 
 	if PlayerIsInsideWorld(ply) then
 		ply:SelectWeapon("swep_106_pd")
-		ServerChat(ply, "[SCP-106] 벽 안에서는 무기를 바꿀 수 없습니다. R키로 먼저 밖으로 나오세요.")
+		ServerChat(ply, "[SCP-106] 벽 안에서는 무기를 바꿀 수 없습니다. 좌클릭으로 먼저 밖으로 나오세요.")
 		return true
 	end
 
 	EndPhase(ply, true)
 end)
+
+local function GetDisabledWeapon(ply)
+	if not IsValid(ply) or not ply:IsPlayer() or not ply:Alive() then return end
+	local weapon = ply:GetWeapon("swep_106_pd")
+	if IsValid(weapon) and weapon:IsFlashDisabled() then return weapon end
+end
+
+-- Use the shared movement multiplier after mode rules, before inertia applies speed.
+-- Slowdown shares the ability-lock expiry; repeated hits refresh it without stacking.
+hook.Add("HG_MovementCalc_2", "SCP106_FlashSlowMovement", function(mul, ply)
+	if not GetDisabledWeapon(ply) then return end
+	mul[1] = mul[1] * FLASH_SPEED_MULTIPLIER
+end)
+
+hook.Add("StartCommand", "SCP106_FlashBlockWeapons", function(ply, cmd)
+	if not GetDisabledWeapon(ply) then return end
+	cmd:RemoveKey(IN_ATTACK)
+	cmd:RemoveKey(IN_ATTACK2)
+	cmd:RemoveKey(IN_RELOAD)
+end)
+
+hook.Add("EntityFireBullets", "SCP106_FlashBlockBullets", function(ent)
+	if GetDisabledWeapon(ent) then return false end
+end)
+
+if SERVER then
+	local function ResetPlayer(ply)
+		local weapon = IsValid(ply) and ply:GetWeapon("swep_106_pd")
+		if IsValid(weapon) then weapon:ResetSCP106State() end
+	end
+	-- Reuse stable hook IDs so auto-refresh replaces the previous callbacks.
+	hook.Add("PlayerDeath", "SCP106_Rebuilt_EndPhaseDeath", ResetPlayer)
+	hook.Add("PlayerDisconnected", "SCP106_Rebuilt_EndPhaseDisconnect", ResetPlayer)
+	hook.Add("PlayerSpawn", "SCP106_ResetAbilities", ResetPlayer)
+	hook.Add("PlayerDroppedWeapon", "SCP106_ResetAbilities", function(ply, weapon)
+		if IsValid(weapon) and weapon:GetClass() == "swep_106_pd" then
+			weapon:ResetSCP106State(ply)
+		end
+	end)
+	local function ResetAll()
+		for _, weapon in ipairs(ents.FindByClass("swep_106_pd")) do
+			weapon:ResetSCP106State()
+		end
+	end
+	hook.Add("PreCleanupMap", "SCP106_ResetAbilities", ResetAll)
+	hook.Add("OnReloaded", "SCP106_ResetAbilities", ResetAll)
+end
+
+if CLIENT then
+	hook.Add("PostDrawHUD", "SCP106_FlashBlindness", function()
+		local ply = LocalPlayer()
+		if not IsValid(ply) or not ply:Alive() then return end
+		local weapon = ply:GetWeapon("swep_106_pd")
+		if not IsValid(weapon) or weapon:GetNWFloat("S106_BlindUntil", 0) <= CurTime() then return end
+		surface.SetDrawColor(255, 255, 255, 255)
+		surface.DrawRect(0, 0, ScrW(), ScrH())
+	end)
+end

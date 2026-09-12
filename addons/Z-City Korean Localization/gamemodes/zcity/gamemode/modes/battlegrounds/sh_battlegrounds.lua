@@ -18,6 +18,11 @@ MODE.AmbientLootSpawn = false
 MODE.noBoxes = true
 MODE.GuiltDisabled = true
 MODE.PoliceAllowed = false
+MODE.EnableRedZones = true
+MODE.EnableAirdrops = true
+MODE.EnableSafeZone = true
+MODE.ItemSpawnAreaOwner = MODE.name
+MODE.StartMessage = "최후의 한 명이 살아남을 때까지 파밍하고 싸우십시오."
 
 MODE.FirstRedZoneDelay = 60
 MODE.RedZoneInterval = 75
@@ -97,6 +102,14 @@ MODE.LootTable = {
 
 function MODE:CanLaunch()
 	return zb.GetActivePlayerCount() >= self.MinPlayers
+end
+
+function MODE:GetRoundPrintName()
+	return self.PrintName
+end
+
+function MODE:GetStartMessage()
+	return self.StartMessage
 end
 
 function MODE.GuiltCheck(attacker, victim, add, harm, amount)

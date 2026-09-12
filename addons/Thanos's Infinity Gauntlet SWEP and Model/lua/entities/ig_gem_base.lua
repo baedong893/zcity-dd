@@ -22,7 +22,9 @@ function ENT:Initialize()
 	self.hp = 99999
 end
 
-function ENT:Use(use,user)
+function ENT:Use(user)
+	-- The activator is the first argument; Z-City also invokes Use(player) directly.
+	if not SERVER or not IsValid(user) or not user:IsPlayer() or not user:Alive() then return end
 	local wep = user:GetActiveWeapon()
 	if !wep:IsValid() or wep:GetClass() != "infinitygauntlet" or wep:HasStone(self.stoneID) or timer.Exists("GiveInfinityStone"..wep:EntIndex()) then return end
 	self:IG_ClearTimeData()

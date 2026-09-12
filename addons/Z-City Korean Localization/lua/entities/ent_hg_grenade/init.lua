@@ -272,6 +272,7 @@ function ENT:Explode()
 	local disorientation_dis = 6 / 0.01905  
 	local entsCount = 0
 	for i, enta in ipairs(ents.FindInSphere(selfPos, disorientation_dis)) do
+		if hook.Run("HG_AllowDamageEffects", enta) == false then continue end
 		local tracePos = enta:IsPlayer() and (enta:GetPos() + enta:OBBCenter()) or enta:GetPos()
 		local tr = hg.ExplosionTrace(selfPos, tracePos, {self})
 		local phys = enta:GetPhysicsObject()

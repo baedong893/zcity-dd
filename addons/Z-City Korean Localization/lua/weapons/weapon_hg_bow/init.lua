@@ -67,12 +67,13 @@ function SWEP:PrimaryAttack()
 				ply:EmitSound("physics/metal/weapon_impact_hard3.wav", 65)
 			end
 
-			if ent:IsPlayer() then
+			local allowDamageEffects = hook.Run("HG_AllowDamageEffects", ent) ~= false
+			if ent:IsPlayer() and allowDamageEffects then
 				ent:ViewPunch(bashvpang)
 			end
 
 			local phys = ent:GetPhysicsObject()
-			if IsValid(phys) then
+			if IsValid(phys) and allowDamageEffects then
 				if ent:IsPlayer() then ent:SetVelocity(tr.Normal * 50 * 1.5 * (ply.organism.superfighter and 5 or 1)) end
 				phys:ApplyForceOffset(tr.Normal * 5000, tr.HitPos)
 				ply:SetVelocity(tr.Normal * 50 * .8 * (ply.organism.superfighter and 2 or 1))

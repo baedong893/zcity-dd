@@ -195,6 +195,31 @@ function MODE:AssignNPCTarget(npc)
     npc:UpdateEnemyMemory(targetPlayer, targetPlayer:GetPos())  
 end
 
+-- Shared Source-NPC creation path; wave ownership/counting stays with the caller.
+function MODE:SpawnHostileNPC(npcDef, spawnPos)
+    local npc = ents.Create(npcDef.type)
+    if not IsValid(npc) then return end
+    npc:SetPos(spawnPos)
+    if npcDef.model then npc:SetModel(npcDef.model) end
+    for key, value in pairs(npcDef.keyvalues or {}) do
+        npc:SetKeyValue(key, value)
+    end
+    if npcDef.aggressive then
+        npc:SetKeyValue("aggressivebehavior", "1")
+        npc:SetKeyValue("spawnflags", "256")
+        if npcDef.type == "npc_zombie" or npcDef.type == "npc_fastzombie" or npcDef.type == "npc_poisonzombie" then
+            npc:SetKeyValue("incominghate", "1")
+        end
+    end
+    npc:Spawn()
+    npc:Activate()
+    if npcDef.weapon and npcDef.weapon ~= "" and not npcDef.default_weapon and
+       (npcDef.type == "npc_combine_s" or npcDef.type == "npc_metropolice") then
+        npc:Give(npcDef.weapon)
+    end
+    return npc
+end
+
 function MODE:StartNewWave()
     if CurrentRound() ~= self or zb.ROUND_STATE ~= 1 then return end
 
@@ -360,43 +385,7 @@ function MODE:SpawnWave()
                 
                 npc.IsDefenseWaveNPC = true
             else
-                npc = ents.Create(queuedNpcDef.type)
-                if not IsValid(npc) then 
-                    if queuedIndex == totalPlannedSpawns then
-                        self.WaveSpawnInProgress = false
-                    end
-
-                    return
-                end
-                
-                npc:SetPos(spawnPos)
-                
-                if queuedNpcDef.model then
-                    npc:SetModel(queuedNpcDef.model)
-                end
-                
-                if queuedNpcDef.keyvalues then
-                    for key, value in pairs(queuedNpcDef.keyvalues) do
-                        npc:SetKeyValue(key, value)
-                    end
-                end
-                
-                if queuedNpcDef.aggressive then
-                    npc:SetKeyValue("aggressivebehavior", "1")
-                    npc:SetKeyValue("spawnflags", "256") 
-                    
-                    if queuedNpcDef.type == "npc_zombie" or queuedNpcDef.type == "npc_fastzombie" or queuedNpcDef.type == "npc_poisonzombie" then
-                        npc:SetKeyValue("incominghate", "1")
-                    end
-                end
-                
-                npc:Spawn()
-                npc:Activate()
-                
-                if queuedNpcDef.weapon and queuedNpcDef.weapon ~= "" and not queuedNpcDef.default_weapon and 
-                   (queuedNpcDef.type == "npc_combine_s" or queuedNpcDef.type == "npc_metropolice") then
-                    npc:Give(queuedNpcDef.weapon)
-                end
+                npc = self:SpawnHostileNPC(queuedNpcDef, spawnPos)
             end
 
             if not IsValid(npc) then 

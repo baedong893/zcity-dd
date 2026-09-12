@@ -3084,16 +3084,7 @@ IG_StoneData = {
 				zcityDuration = 5,
 				zcityCooldown = 5,
 				Use = function(self,data,ability)
-					if IG_ZCityIsInfinityStoneRound() then
-						local timerName = "IG_ZCityTimeStop_" .. self:EntIndex()
-						IG_SetTimeFlow(false)
-						timer.Create(timerName, ability.zcityDuration, 1, function()
-							IG_SetTimeFlow(true)
-						end)
-						return
-					end
-
-					IG_SetTimeFlow(!IG_IsTimeFlowing())
+					IG_SetTimeFlow(false, ability.zcityDuration)
 				end,
 			},
 			{
@@ -7292,7 +7283,9 @@ function SWEP:Deploy()
 	self:SetHoldType(self.HoldType)
 	self:SetDeploySpeed(999)
 	if !self.hasDeployed then
-		if !self.noStonesCreated then
+		-- Empty-gauntlet conversion runs on the server. Clients must not replace
+		-- its replicated empty/collected-stone flags with a local full set.
+		if SERVER and !self.noStonesCreated then
 			for i=1,6 do
 				self:SetHasStone(i,true)
 			end

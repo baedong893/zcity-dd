@@ -164,6 +164,7 @@ if CLIENT then
 end
 
 function hg.ExplosionDisorientation(enta, tinnitus, disorientation)
+	if hook.Run("HG_AllowDamageEffects", enta) == false then return end
 	enta.organism.owner:AddTinnitus(tinnitus)
 	enta.organism.disorientation = enta.organism.disorientation + (disorientation)
 
@@ -232,6 +233,7 @@ local function ExplodeTheItem(self,ent)
 			local dis = BlastDis / 0.01905
 			local disorientation_dis = 10 / 0.01905  
 			for _, enta in ipairs(ents.FindInSphere(EntPos, disorientation_dis)) do
+				if hook.Run("HG_AllowDamageEffects", enta) == false then continue end
 				local tracePos = enta:IsPlayer() and (enta:GetPos() + enta:OBBCenter()) or enta:GetPos()
 				local tr = hg.ExplosionTrace(EntPos, tracePos, {ent})
 

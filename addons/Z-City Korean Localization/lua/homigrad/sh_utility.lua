@@ -1072,6 +1072,7 @@ local IsValid = IsValid
 --\\ AddForceRag
 	function hg.AddForceRag(ply, physbone, force, time)
 		if !IsValid(ply) or !ply:IsPlayer() then return end
+		if hook.Run("HG_AllowDamageEffects", ply) == false then return end
 		if ply:IsRagdoll() then
 			local phys = ply:GetPhysicsObjectNum(physbone)
 

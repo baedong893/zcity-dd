@@ -94,7 +94,7 @@ function SWEP:SecondaryAttack()
 				tr.Entity.Touched = true
 				self:ApplyForce()
 			--end
-		elseif IsValid(tr.Entity) and tr.Entity:IsPlayer() then
+		elseif IsValid(tr.Entity) and tr.Entity:IsPlayer() and hook.Run("HG_AllowDamageEffects", tr.Entity) ~= false then
 			local Dist = (select(1, hg.eye(self:GetOwner())) - tr.HitPos):Length()
 			if Dist < self.ReachDistance then
 				sound.Play("weapons/melee/blunt_light"..math_random(8)..".wav", self:GetOwner():GetShootPos(), 65, math_random(90, 110))
@@ -814,16 +814,17 @@ function SWEP:AttackFront(special_attack, rand)
 			Mul = Mul * (self:GetBlocking() and 0.5 or 1)
 		end
 
+		local allowDamageEffects = hook.Run("HG_AllowDamageEffects", Ent) ~= false
 		if owner.organism.superfighter then
 			Mul = Mul * 5 * self.Penetration
-			if Ent.organism then
+			if Ent.organism and allowDamageEffects then
 				Ent.organism.immobilization = 10
 			end
 		end
 
 		if owner:IsBerserk() then
 			Mul = Mul * (1 + owner.organism.berserk * 5) * self.Penetration
-			if Ent.organism then
+			if Ent.organism and allowDamageEffects then
 				Ent.organism.immobilization = 1
 			end
 		end
@@ -841,11 +842,11 @@ function SWEP:AttackFront(special_attack, rand)
 
 		local Phys = Ent:IsPlayer() and Ent:GetPhysicsObject() or Ent:GetPhysicsObjectNum(physbone or 0)
 
-		if Ent:IsPlayer() then
+		if Ent:IsPlayer() and allowDamageEffects then
 			Ent:ViewPunch(Angle(special_attack and -45 or -5,0,0))
 		end
 
-		if IsValid(Phys) then
+		if IsValid(Phys) and allowDamageEffects then
 			if Ent:IsPlayer() then Ent:SetVelocity(AimVec * SelfForce * 1.5 * (owner.organism.superfighter and 5 or 1) * (1 + owner.organism.berserk * 5)) end
 			Phys:ApplyForceOffset(AimVec * 5000 * Mul, HitPos)
 			owner:SetVelocity(AimVec * SelfForce * .8 * (owner.organism.superfighter and 2 or 1) * (1 + owner.organism.berserk / 10))

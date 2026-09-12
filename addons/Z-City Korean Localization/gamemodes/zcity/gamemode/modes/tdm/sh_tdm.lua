@@ -185,7 +185,7 @@ AddItemToBUY( "Arrow", "Ammo", "ent_ammo_arrow", 25, "Ammo", {}, 5)
 
 function MODE:HG_MovementCalc_2( mul, ply, cmd, mv )
     local round = CurrentRound and CurrentRound()
-    if round and round.buymenu == false then return end
+    if round and (round.buymenu == false or round.FreezeDuringBuyTime == false) then return end
 
     local buyTime = (round and round.BuyTime) or MODE.BuyTime or 20
     if buyTime <= 0 then return end

@@ -506,6 +506,7 @@ end)
 
 function hg.StunPlayer(ply,time)
 	if !IsValid(ply) or !ply:IsPlayer() then return end
+	if hook.Run("HG_AllowDamageEffects", ply) == false then return end
 	if !IsValid(ply.FakeRagdoll) then hg.Fake(ply) end
 
 	ply.organism.stun = CurTime() + (time or 1)
@@ -513,6 +514,7 @@ end
 
 function hg.LightStunPlayer(ply,time)
 	if !IsValid(ply) or !ply:IsPlayer() then return end
+	if hook.Run("HG_AllowDamageEffects", ply) == false then return end
 	if !IsValid(ply.FakeRagdoll) then hg.Fake(ply,nil,true) end
 
 	ply.organism.lightstun = CurTime() + (time or 1)

@@ -105,7 +105,7 @@ function ENT:Explode()
             ply:TakeDamageInfo(dmginfo)
         end
 
-        if distance <= disorientationRadius then
+        if distance <= disorientationRadius and hook.Run("HG_AllowDamageEffects", ply) ~= false then
             if org then
                 hg.ExplosionDisorientation(org.owner, 5, 6)
 				hg.RunZManipAnim(org.owner, "shieldexplosion")
