@@ -116,11 +116,13 @@ function MODE:RoundThink()
     end
 
     if #players == 0 or CurTime() < (self.saved.NextZombieSpawn or 0) then return end
-    self.saved.NextZombieSpawn = CurTime() + self.ZombieSpawnInterval
+    local variant = self:GetVariant() or self
+    self.saved.NextZombieSpawn = CurTime() + (variant.ZombieSpawnInterval or self.ZombieSpawnInterval)
     local provider = zb.modes[self.HostileNPCProvider]
     if not provider or not provider.SpawnHostileNPC then return end
-    local limit = math.Clamp(#players * self.ZombiesPerPlayer, self.ZombieMinimum, self.ZombieMaximum)
-    for _ = 1, math.min(self.ZombieSpawnBatch, math.max(limit - #zombies, 0)) do
+    local limit = math.Clamp(#players * self.ZombiesPerPlayer, variant.ZombieMinimum or self.ZombieMinimum, self.ZombieMaximum)
+    local batch = variant.ZombieSpawnBatch or self.ZombieSpawnBatch
+    for _ = 1, math.min(batch, math.max(limit - #zombies, 0)) do
         local target = players[math.random(#players)]
         local center = target:GetPos()
         local pos = provider:FindNavMeshSpawnPoint(center, self.ZombieSpawnMinRadius, self.ZombieSpawnMaxRadius)

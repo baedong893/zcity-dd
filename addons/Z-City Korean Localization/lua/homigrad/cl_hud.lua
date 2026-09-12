@@ -22,7 +22,10 @@ local gordon_hide = {
 }
 
 hook.Add("HUDShouldDraw", "homigrad", function(name)
-	if hide[name] or lply.PlayerClassName and lply.PlayerClassName == "Gordon" and gordon_hide[name] then
+	if hide[name] then return false end
+	-- HUD callbacks can run before InitPostEntity initializes the global lply.
+	local ply = LocalPlayer()
+	if IsValid(ply) and ply.PlayerClassName == "Gordon" and gordon_hide[name] then
 		return false
 	end
 end)
@@ -35,6 +38,7 @@ hook.Add("DrawDeathNotice", "homigrad", function()
 end)
 
 hook.Add("HUDWeaponPickedUp", "HidePickedStuff", function(wep)
+	local lply = LocalPlayer()
 	--if not IsValid(lply) or not lply:Alive() then return end
 	if IsValid(lply) and lply.PlayerClassName and lply.PlayerClassName == "Gordon" then
 		return
@@ -49,6 +53,7 @@ hook.Add("HUDWeaponPickedUp", "HidePickedStuff", function(wep)
 end)
 
 hook.Add("HUDAmmoPickedUp", "HidePickedStuff", function(ammoname, amt)
+	local lply = LocalPlayer()
 	if IsValid(lply) and lply.PlayerClassName and lply.PlayerClassName == "Gordon" then
 		return
 	end
@@ -57,6 +62,7 @@ hook.Add("HUDAmmoPickedUp", "HidePickedStuff", function(ammoname, amt)
 end)
 
 hook.Add("HUDItemPickedUp", "HidePickedStuff", function(itemname)
+	local lply = LocalPlayer()
 	if IsValid(lply) and lply.PlayerClassName and lply.PlayerClassName == "Gordon" then
 		return
 	end
@@ -65,6 +71,7 @@ hook.Add("HUDItemPickedUp", "HidePickedStuff", function(itemname)
 end)
 
 hook.Add("HUDDrawPickupHistory", "HidePickedStuff", function()
+	local lply = LocalPlayer()
 	if IsValid(lply) and lply.PlayerClassName and lply.PlayerClassName == "Gordon" then
 		return
 	end
@@ -206,6 +213,8 @@ local menuPanel
 local colBack = Color(0,0,0)
 local surface, draw, hook, IsColor, IsValid, math, input = surface, draw, hook, IsColor, IsValid, math, input
 local function CreateRadialMenu(options_arg, bAutoClose, bResetCursor)
+	local lply = LocalPlayer()
+	if not IsValid(lply) then return end
 	local sizeX, sizeY = ScrW(), ScrH()
 	hg.radialOptions = {}
 	local paining = lply.organism and lply.organism.pain and (lply.organism.pain > 100 or lply.organism.brain > 0.2) or false
@@ -253,6 +262,7 @@ local function CreateRadialMenu(options_arg, bAutoClose, bResetCursor)
 	local thinkwait = 0
 	if !options_arg then
 		menuPanel.Think = function()
+			if not IsValid(lply) then menuPanel:Remove() return end
 			if menuPanel:GetAlpha() < 255 then return end
 			if thinkwait > CurTime() then return end
 			thinkwait = CurTime() + 0.25
@@ -269,6 +279,7 @@ local function CreateRadialMenu(options_arg, bAutoClose, bResetCursor)
 	local sizePan = 0
 	local optionSelected = {}
 	menuPanel.Paint = function(self, w, h)
+		if not IsValid(lply) then self:Remove() return end
 		local x, y = input.GetCursorPos()
 		x = x - sizeX / 2
 		y = y - sizeY / 2
@@ -425,7 +436,7 @@ local firstTime6 = true
 -- first time?..
 
 hook.Add("HG_OnOtrub", "resetshit", function(ply)
-	if ply == lply then
+	if IsValid(ply) and ply == LocalPlayer() then
 		hook_Run("RadialMenuPressed")
 
 		if IsValid(menuPanel) then
@@ -435,9 +446,10 @@ hook.Add("HG_OnOtrub", "resetshit", function(ply)
 end)
 
 hook.Add( "PlayerBindPress", "PlayerBindPressExample2huy", function( ply, bind, pressed )
+	if not IsValid(ply) then return end
 	if string.find(bind, "+menu") then
 
-		if (lply.organism and lply.organism.otrub) then
+		if (ply.organism and ply.organism.otrub) then
 			return (bind == "+menu") or nil
 		end
 
@@ -453,7 +465,7 @@ hook.Add( "PlayerBindPress", "PlayerBindPressExample2huy", function( ply, bind, 
 				PressRadialMenu(1)
 			end
 		else
-			if lply:IsAdmin() then return end
+			if ply:IsAdmin() then return end
 		end
 
 		return true
@@ -461,6 +473,8 @@ hook.Add( "PlayerBindPress", "PlayerBindPressExample2huy", function( ply, bind, 
 end)
 
 hook.Add("Think", "hg-radial-menu", function()
+	local lply = LocalPlayer()
+	if not IsValid(lply) then return end
 	if (lply.organism and lply.organism.otrub) then
 
 		if IsValid(menuPanel) then
@@ -527,6 +541,8 @@ local function dropWeapon()
 end
 
 hook.Add("radialOptions", "77", function()
+	local lply = LocalPlayer()
+	if not IsValid(lply) then return end
 	local organism = lply.organism or {}
 	if not organism.otrub and IsValid(lply:GetActiveWeapon()) and lply:GetActiveWeapon():GetClass() ~= "weapon_hands_sh" and lply:KeyDown(IN_WALK) then
 		local tbl = {dropWeapon, "무기 버리기"}
@@ -566,6 +582,7 @@ local randomGestures = {
 -- 제스쳐 옵션 및 하위 메뉴 로직
 hook.Add("radialOptions", "7", function()
     local ply = LocalPlayer()
+    if not IsValid(ply) then return end
     local organism = ply.organism or {}
 
     if ply:Alive() and not organism.otrub and hg.GetCurrentCharacter(ply) == ply then
@@ -654,6 +671,8 @@ end
 --end)
 
 hook.Add("HUDPaint","Identifier",function()
+	local lply = LocalPlayer()
+	if not IsValid(lply) then return end
 	if lply.organism and lply.organism.otrub then return end
 	if !lply:Alive() then return end
 	if lply:GetNetVar("disappearance", nil) then return end 
@@ -702,7 +721,9 @@ local hg_hints = ConVarExists("hg_hints") and GetConVar("hg_hints") or CreateCli
 local HintBackgroundColor = Color( 0, 0, 0, 200 )
 
 hook.Add("HUDPaint","EntHints",function()
-	if not hg_hints:GetBool() then return end 
+	local lply = LocalPlayer()
+	if not IsValid(lply) then return end
+	if not hg_hints:GetBool() then return end
 	if lply.organism and lply.organism.otrub then return end
 	if !lply:Alive() then return end
 	

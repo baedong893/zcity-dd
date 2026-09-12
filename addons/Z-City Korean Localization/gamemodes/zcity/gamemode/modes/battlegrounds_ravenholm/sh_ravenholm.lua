@@ -3,6 +3,7 @@ local MODE = MODE
 MODE.base = "battlegrounds"
 MODE.name = "ravenholm"
 MODE.PrintName = "레이븐홈 / 17번 지구"
+MODE.MinPlayers = 2
 MODE.Description = "시작할 때 레이븐홈 또는 17번 지구가 무작위로 선택됩니다. 무기를 파밍하며 좀비 또는 전기봉을 든 시민보호 기동대를 피해 최후까지 살아남으십시오. 자기장, 보급, 레드존은 없습니다."
 MODE.Chance = 0.02
 MODE.MenuVisible = true
@@ -28,6 +29,9 @@ MODE.Variants = {
         IntroSound = "zcity/hl_survival/ravenholm_intro_full.wav",
         IntroDuration = 50.755918367347,
         IntroScreenDuration = 6,
+        ZombieMinimum = 16,
+        ZombieSpawnInterval = 3,
+        ZombieSpawnBatch = 3,
         Hostiles = {
             {type = "npc_zombie", health = 120, aggressive = true, weight = 6},
             {type = "npc_fastzombie", health = 80, aggressive = true, weight = 2},

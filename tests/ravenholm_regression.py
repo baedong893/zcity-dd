@@ -249,15 +249,23 @@ assert(r.saved~=b.saved and r.ZonePhases~=b.ZonePhases and r.LootTable~=b.LootTa
 assert(r.LootSpawn and r.randomSpawns and r.ROUND_TIME==b.ROUND_TIME)
 assert(not r.EnableAirdrops and not r.EnableRedZones and not r.EnableSafeZone and b.EnableSafeZone and b.EnableAirdrops and b.EnableRedZones)
 human=NewPlayer(false,false); spectator=NewPlayer(true,false); bot=NewPlayer(false,true)
-players={human,bot,NewPlayer(false,false),spectator}
-assert(zb.GetActivePlayerCount()==3 and not r:CanLaunch() and not b:CanLaunch())
-players[#players+1]=NewPlayer(false,false)
-assert(zb.GetActivePlayerCount()==4 and r:CanLaunch() and b:CanLaunch())
-local entries=0
-for _,entry in ipairs(zb.GetModesInfo()) do if entry.key=='ravenholm' then
- entries=entries+1; assert(entry.name==r.PrintName and entry.menuVisible and entry.canlaunch==1) end end
-assert(entries==1)
--- Direct administrator selection uses the exact new id through the real lifecycle.
+assert(r.MinPlayers==2 and b.MinPlayers==4,'child minimum leaked into ordinary battlegrounds')
+local candidates={human,bot,NewPlayer(false,false),NewPlayer(false,false)}
+players={spectator}
+for count=0,4 do
+ if count>0 then players[#players+1]=candidates[count] end
+ assert(zb.GetActivePlayerCount()==count,'spectator counted toward minimum')
+ assert(r:CanLaunch()==(count>=2) and b:CanLaunch()==(count>=4),'wrong minimum-player boundary')
+ assert(table.HasValue(zb.GetAvailableModes(),'ravenholm')==(count>=2),'available modes ignored minimum')
+ local entries=0
+ for _,entry in ipairs(zb.GetModesInfo()) do if entry.key=='ravenholm' then
+  entries=entries+1
+  assert(entry.name==r.PrintName and entry.menuVisible and entry.canlaunch==(count>=2 and 1 or 0))
+ end end
+ assert(entries==1)
+end
+-- Direct administrator selection starts normally with exactly two active players (including a bot).
+players={human,bot,spectator}
 net.input={'setmode','ravenholm',false}; net.receivers.AdminSetGameMode(0,human)
 assert(CurrentRound()==r and zb.CROUND_MAIN=='ravenholm' and zb.CROUND=='ravenholm')
 assert(not r.saved.Zone and not spectator.spawned and r:GetVariant())
@@ -270,6 +278,8 @@ while timer.items.ZC_BG_FieldLootSpawn do timer.items.ZC_BG_FieldLootSpawn() end
 assert(#r.saved.FieldLoot==32 and not b.saved.FieldLoot)
 assert(r.saved.NextAirdrop==nil and r.saved.NextRedZone==nil)
 assert(r:ShouldRoundEnd()==nil)
+-- Restore the four-player fixture used by the existing population/loot checks.
+players[#players+1]=candidates[3]; players[#players+1]=candidates[4]
 -- Real provider rejects visible, underwater and blocked NPC positions; accepts hidden ones.
 for _,p in ipairs(players) do p.pos=Vector() end
 occluded=false; water=false; blocked=false
@@ -283,7 +293,8 @@ water=true; assert(not d:FindNavMeshSpawnPoint(Vector(),600,1400)); water=false
 blocked=true; assert(not d:FindNavMeshSpawnPoint(Vector(),600,1400)); blocked=false
 -- Start delay, nearby spawning, hostility to participants, and neutral spectators.
 now=109; r:RoundThink(); assert(#r.saved.Zombies==0)
-now=110; r:RoundThink(); assert(#r.saved.Zombies==2)
+local firstBatch=r.saved.VariantId=='ravenholm' and 3 or 2
+now=110; r:RoundThink(); assert(#r.saved.Zombies==firstBatch)
 local first=r.saved.Zombies[1]
 assert(first.pos.x==-900 and first.spawned and first.activated and first.maxHealth==first.health)
 assert(first.relations[human]==D_HT and first.relations[bot]==D_HT and first.relations[spectator]==D_NU)
@@ -295,9 +306,17 @@ assert(not r.saved.Zone and not globals.ZC_BG_Active,'safe zone remained enabled
 local formerPos=human.pos; human.pos=Vector(50000,0,0); human.damage=0
 r:RoundThink(); assert(human.damage==0,'safe zone damaged a distant survivor'); human.pos=formerPos
 -- Invalid creation and missing navmesh are bounded; the real defense fallback still works.
+-- Supply a reachable fallback point so unrelated random draws cannot exhaust its attempts.
+local randomBeforeFallback=math.random; local fallbackAxis=0
+math.random=function(...)
+ local a,b=...
+ if a==-1400 and b==1400 then fallbackAxis=fallbackAxis+1; return fallbackAxis%2==1 and -900 or 0 end
+ return randomBeforeFallback(...)
+end
 r:ClearZombies(); navAreas={}; occluded=true; now=now+4; r:RoundThink()
-assert(#r.saved.Zombies>0 and #r.saved.Zombies<=2)
+assert(#r.saved.Zombies>0 and #r.saved.Zombies<=firstBatch)
 for _,npc in ipairs(r.saved.Zombies) do assert(npc.pos:DistToSqr(Vector())>=600^2 and npc.pos:DistToSqr(Vector())<=1400^2) end
+math.random=randomBeforeFallback
 r:ClearZombies(); failCreate=true; now=now+4; r:RoundThink(); assert(#r.saved.Zombies==0); failCreate=false
 water=true; now=now+4; r:RoundThink(); assert(#r.saved.Zombies==0); water=false
 navAreas={NewArea(-900,0)}; now=now+4; r:RoundThink()
@@ -375,10 +394,13 @@ b:EndRound(); assert(#b.saved.Airdrops==0 and not globals.ZC_BG_RedActive)
 now=now+1; net.input={{'ravenholm','battlegrounds'}}; net.receivers.AdminSetGameQueue(0,human)
 assert(zb.QueuedModes[1]=='ravenholm')
 b:Intermission(); zb:RoundStart(); assert(zb.nextround=='ravenholm')
+local queuePlayers=players; players={human,bot,spectator}
+assert(zb.GetActivePlayerCount()==2)
 NextRound('ravenholm'); net.receivers.AdminEndRound(0,human)
 zb:EndRoundThink(); now=now+8; zb:EndRoundThink()
 assert(CurrentRound()==r and zb.CROUND=='ravenholm' and zb.CROUND_MAIN=='ravenholm')
 zb:RoundStart(); assert(#r.saved.FieldLoot==6 and not r.saved.NextAirdrop)
+players=queuePlayers
 -- Map-area updates apply to both family members, not an unrelated mode.
 hook.Run('ZB_Area2DSaved',zb.ItemSpawnArea.ID,{reject=true})
 assert(r.saved.ItemSpawnPolygon.reject and b.saved.ItemSpawnPolygon.reject and not d.saved.ItemSpawnPolygon)
@@ -388,13 +410,14 @@ saved=r.saved; oldMode=r; zb.modes.ghost={saved={}}; zb.modesHooks.ghost={}
 lua.execute(loader)
 lua.execute(r'''
 r=zb.modes.ravenholm; b=zb.modes.battlegrounds
+assert(r.MinPlayers==2 and b.MinPlayers==4,'reload lost the child minimum')
 assert(r~=oldMode and r.saved==saved and not zb.modes.ghost and not zb.modesHooks.ghost)
 assert(#zb.GetModes()==3 and CurrentRound()==r and zb.modesHooks.ravenholm.RoundThink==r.RoundThink)
 assert(not timer.items.ZC_BG_FieldLootSpawn)
 r:EndRound(); r:Intermission()
 for _,p in ipairs(players) do p.pos=Vector() end
 r:RoundStart(); now=now+11; r:RoundThink()
-assert(#r.saved.Zombies==2)
+assert(#r.saved.Zombies==(r.saved.VariantId=='ravenholm' and 3 or 2))
 local previous=r.saved.Zombies[1]; hook.Run('PostCleanupMap')
 assert(not IsValid(previous) and #r.saved.Zombies==0)
 r:EndRound()
@@ -409,7 +432,7 @@ for attempt=1,16 do
  r:Intermission(); local id=r.saved.VariantId; seen[id]=true
  for _,p in ipairs(players) do p.pos=Vector() end
  r:RoundStart(); assert(r.saved.VariantId==id,'variant rerolled after intermission')
- now=now+11; r:RoundThink(); assert(#r.saved.Zombies==2)
+ now=now+11; r:RoundThink(); assert(#r.saved.Zombies==(id=='ravenholm' and 3 or 2))
  for _,npc in ipairs(r.saved.Zombies) do
   if id=='city17' then assert(npc.class=='npc_metropolice' and npc.weapon=='weapon_stunstick')
   else assert(npc.class=='npc_zombie' or npc.class=='npc_fastzombie' or npc.class=='npc_poisonzombie') end
@@ -423,18 +446,39 @@ hook.Run('ZB_PreRoundStart')
 assert(not r.saved.VariantId and globals.ZC_HLS_Variant=='' and globals.ZC_HLS_IntroStart==0)
 globals.ZC_HLS_Variant='city17'; assert(not r:GetVariant(),'server took stale replicated client state')
 globals.ZC_HLS_Variant=''; zb.ROUND_STATE=1
--- NPC population boundaries: solo forced testing has a floor, large servers have a ceiling.
-for _,fixture in ipairs({{1,8},{10,32}}) do
- players={}; for i=1,fixture[1] do players[i]=NewPlayer(false,false) end
- human=players[1]; r:Intermission(); for _,p in ipairs(players) do p.pos=Vector() end
- r:RoundStart(); navAreas={NewArea(-900,0)}
- for i=1,22 do now=now+4; r:RoundThink() end
- assert(#r.saved.Zombies==fixture[2],'population boundary failed')
- r:EndRound()
+-- Ravenholm's two-player population doubles to 16, refilling 3 per 3 seconds;
+-- City 17 keeps 8 and 2 per 4 seconds. Both retain the 32-NPC spawn ceiling.
+for _,id in ipairs({'ravenholm','city17'}) do
+ local batch=id=='ravenholm' and 3 or 2
+ local interval=id=='ravenholm' and 3 or 4
+ for _,fixture in ipairs({{1,16,8},{2,16,8},{4,16,16},{10,32,32}}) do
+  local limit=fixture[id=='ravenholm' and 2 or 3]
+  players={}; for i=1,fixture[1] do players[i]=NewPlayer(false,i==2) end
+  players[#players+1]=spectator
+  human=players[1]; r:Intermission(); r.saved.VariantId=id
+  for _,p in ipairs(players) do p.pos=Vector() end
+  r:RoundStart(); navAreas={NewArea(-900,0)}
+  local firstSpawn=now+10
+  now=firstSpawn-0.001; r:RoundThink(); assert(#r.saved.Zombies==0,'intro spawn delay shortened')
+  now=firstSpawn; r:RoundThink(); assert(#r.saved.Zombies==batch,'incorrect variant spawn batch')
+  now=firstSpawn+interval-0.001; r:RoundThink(); assert(#r.saved.Zombies==batch,'reinforcement arrived early')
+  now=firstSpawn+interval; r:RoundThink(); assert(#r.saved.Zombies==batch*2,'incorrect variant spawn interval')
+  for i=1,180 do
+   now=now+interval; r:RoundThink()
+   assert(#r.saved.Zombies<=limit,'continued spawning exceeded the population limit')
+  end
+  assert(#r.saved.Zombies==limit,'population failed to reach target')
+  r.saved.Zombies[1]:SetHealth(0)
+  now=now+interval; r:RoundThink()
+  assert(#r.saved.Zombies==limit,'refill did not stop at the last available slot')
+  r:EndRound()
+  assert(#r.saved.Zombies==0 and not r.saved.NextZombieSpawn,'variant spawn state survived cleanup')
+ end
 end
 players={spectator}; spectator.alive=true; r:Intermission(); r:RoundStart(); now=now+11; r:RoundThink()
 assert(#r.saved.Zombies==0,'spectator triggered NPC spawning'); r:EndRound()
 ''')
+print("PASS: two-player Ravenholm reaches 16 with 3-second/3-NPC refill; City 17 stays at 8; repeated spawning respects limits and cleanup")
 
 # Fresh client registry: variant intro, audio, and the regular in-round HUD.
 lua.execute(r'''
